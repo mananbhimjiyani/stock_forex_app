@@ -26,10 +26,20 @@ from app.models import UserActivity, Prediction
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Initialize AWS clients (using Free Tier)
-s3_client = boto3.client('s3')
-# Initialize AWS clients (using Free Tier)
-dynamodb = boto3.resource('dynamodb')
+# Initialize AWS clients with configuration from settings
+s3_client = boto3.client(
+    's3',
+    region_name=settings.AWS_REGION,
+    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+)
+
+dynamodb = boto3.resource(
+    'dynamodb',
+    region_name=settings.AWS_REGION,
+    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+)
 
 # Reference DynamoDB tables
 news_cache_table = dynamodb.Table('NewsCache')
