@@ -1,24 +1,41 @@
 # app/views.py
 import os
 from datetime import datetime, timedelta
+
+import boto3
 import requests
+from botocore.exceptions import ClientError, BotoCoreError
 from django.conf import settings
 from django.core.cache import cache
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login as auth_login, logout  # Rename Django's login to auth_login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
-import pandas as pd
 import joblib
 import yfinance as yf
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
 import logging
+import boto3
+from botocore.exceptions import ClientError
+from datetime import datetime, timedelta
+import pandas as pd
+
+from app.models import UserActivity, Prediction
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Initialize AWS clients (using Free Tier)
+s3_client = boto3.client('s3')
+# Initialize AWS clients (using Free Tier)
+dynamodb = boto3.resource('dynamodb')
+
+# Reference DynamoDB tables
+news_cache_table = dynamodb.Table('NewsCache')
+sentiment_cache_table = dynamodb.Table('SentimentCache')
+predictions_table = dynamodb.Table('Predictions')
+user_activities_table = dynamodb.Table('UserActivities')
 
 # Define mappings (replace with your actual mappings)
 company_mapping = {
@@ -40,10 +57,6 @@ forex_mapping = {
     12: 'USD-JPY-ASK.joblib', 13: 'USD-JPY-BID.joblib', 14: 'XAG-USD-ASK.joblib', 15: 'XAG-USD-BID.joblib'
 }
 
-# Initialize AWS clients (using Free Tier)
-s3_client = boto3.client('s3')
-dynamodb = boto3.resource('dynamodb')
-
 @login_required
 def api_usage(request):
     """
@@ -52,11 +65,10 @@ def api_usage(request):
     gnews_daily_counter = cache.get('gnews_daily_counter', 0)
     comprehend_monthly_counter = cache.get('comprehend_monthly_counter', 0)
 
-    return JsonResponse({
-        'gnews_remaining_requests': 100 - gnews_daily_counter,
-        'comprehend_remaining_units': 50000 - comprehend_monthly_counter,
+    return render(request, 'api_usage.html', {
+        'gnews_daily_usage': gnews_daily_counter,
+        'comprehend_monthly_usage': comprehend_monthly_counter
     })
-
 def rate_limit(view_func):
     def wrapped_view(request, *args, **kwargs):
         user_key = f"rate_limit_{request.user.id}"
@@ -72,32 +84,34 @@ def home(request):
     """Render the home page."""
     return render(request, 'home.html')
 
-def login(request):
-    """Render the login page."""
+def user_login(request):
+    """Handle user login."""
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            login(request, user)  # Start a session for the user
-            return redirect('dashboard')  # Redirect to dashboard on successful login
+            auth_login(request, user)  # Use auth_login instead of login
+            messages.success(request, 'You have been logged in.')
+            return redirect('home')
         else:
-            return render(request, 'login.html', {'error': 'Invalid credentials'})
+            messages.error(request, 'Invalid credentials.')
     return render(request, 'login.html')
 
 
 
 @login_required
 def dashboard(request):
-    """Render the dashboard page for authenticated users."""
-    # Store user activity in DynamoDB (AWS Free Tier)
+    """
+    Render the dashboard page for authenticated users.
+    Store user activity in DynamoDB (AWS Free Tier).
+    """
     try:
-        table = dynamodb.Table('UserActivities')
-        table.put_item(
+        user_activities_table.put_item(
             Item={
                 'UserId': str(request.user.id),
                 'Activity': 'AccessedDashboard',
-                'Timestamp': str(pd.Timestamp.now()),
+                'Timestamp': pd.Timestamp.now().isoformat(),
                 'UserAgent': request.META.get('HTTP_USER_AGENT', '')
             }
         )
@@ -105,112 +119,88 @@ def dashboard(request):
         logger.error(f"Error logging user activity: {e}")
 
     return render(request, 'dashboard.html', {'username': request.user.username})
-
-
 @login_required
 @rate_limit
 def predict_stock(request):
-    """Predict stock price (authenticated users only)."""
-    if request.method == 'GET':
-        company_symbol = request.GET.get('company_symbol')
-        try:
-            company_symbol = int(company_symbol)
-            if company_symbol not in company_mapping:
-                return JsonResponse({"error": "Invalid company_symbol."})
-        except ValueError:
-            return JsonResponse({"error": "Invalid company_symbol. It should be an integer."})
+    """
+    Predict stock price (authenticated users only).
+    Log predictions in DynamoDB.
+    """
+    company = request.GET.get('company')
+    company_symbol = request.GET.get('symbol')
 
-        company = company_mapping[company_symbol]
+    # Load model (example assumes S3 or local model loading logic)
+    try:
+        model = joblib.load('models/stock_price_predictor_model.joblib')
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        return JsonResponse({"error": "Model loading failed."}, status=500)
 
-        try:
-            # Try to load model from S3 (AWS Free Tier)
-            model_file = 'stock_price_predictor_model.joblib'
-            s3_client.download_file('your-s3-bucket-name', f'models/{model_file}', f'/tmp/{model_file}')
-            model = joblib.load(f'/tmp/{model_file}')
-        except ClientError as e:
-            logger.error(f"Error loading model from S3: {e}")
-            # Fallback to local model if S3 fails
-            model = joblib.load('models/stock_price_predictor_model.joblib')
+    # Prepare data for prediction
+    data = pd.DataFrame({
+        'Close_Lagged': [get_current_closing(company)],
+        'Sentiment_Score': [get_current_sentiment(company)],
+        'Company': [company_symbol]
+    })
+    X_test = data[['Close_Lagged', 'Sentiment_Score', 'Company']]
+    prediction = model.predict(X_test)
 
-        data = pd.DataFrame({
-            'Close_Lagged': [get_current_closing(company)],
-            'Sentiment_Score': [get_current_sentiment(company)],
-            'Company': [company_symbol],
-        })
+    # Log prediction in DynamoDB
+    try:
+        predictions_table.put_item(
+            Item={
+                'UserId': str(request.user.id),
+                'PredictionType': 'Stock',
+                'Company': company,
+                'PredictionValue': str(prediction[0]),
+                'Timestamp': pd.Timestamp.now().isoformat()
+            }
+        )
+    except ClientError as e:
+        logger.error(f"Error logging prediction: {e}")
 
-        X_test = data[['Close_Lagged', 'Sentiment_Score', 'Company']]
-        prediction = model.predict(X_test)
-
-        # Log prediction in DynamoDB
-        try:
-            table = dynamodb.Table('Predictions')
-            table.put_item(
-                Item={
-                    'UserId': str(request.user.id),
-                    'PredictionType': 'Stock',
-                    'Company': company,
-                    'PredictionValue': str(prediction[0]),
-                    'Timestamp': str(pd.Timestamp.now())
-                }
-            )
-        except ClientError as e:
-            logger.error(f"Error logging prediction: {e}")
-
-        return JsonResponse({"prediction": float(prediction[0])})
-
+    return JsonResponse({"prediction": float(prediction[0])})
 
 @login_required
 @rate_limit
 def predict_forex(request):
-    """Predict forex price (authenticated users only)."""
-    if request.method == 'GET':
-        forex_symbol = int(request.GET.get('forex_symbol'))
-        if forex_symbol not in forex_mapping:
-            return JsonResponse({"error": "Invalid forex_index."})
+    """
+    Predict forex price (authenticated users only).
+    Log predictions in DynamoDB.
+    """
+    forex_pair = request.GET.get('pair')
 
-        model_filename = forex_mapping[forex_symbol]
-        try:
-            # Try to load model from S3 (AWS Free Tier)
-            s3_client.download_file('your-s3-bucket-name', f'models/{model_filename}', f'/tmp/{model_filename}')
-            model = joblib.load(f'/tmp/{model_filename}')
-        except ClientError as e:
-            logger.error(f"Error loading model from S3: {e}")
-            # Fallback to local model if S3 fails
-            model = joblib.load(f'models/{model_filename}')
+    # Load model (example assumes S3 or local model loading logic)
+    try:
+        model = joblib.load(f'models/{forex_pair}.joblib')
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        return JsonResponse({"error": "Model loading failed."}, status=500)
 
-        forex = yf.Ticker(forex_mapping[forex_symbol])
-        data = forex.history(period="1d", interval="1m")
+    # Prepare data for prediction
+    data = pd.DataFrame({
+        'Close': [get_current_closing(forex_pair)],
+        'High': [get_current_high(forex_pair)],
+        'Low': [get_current_low(forex_pair)],
+        'Volume': [get_current_volume(forex_pair)]
+    })
+    prediction = model.predict(data)
 
-        forex_close = data['Close'].iloc[-1]
-        forex_high = data['High'].iloc[-1]
-        forex_low = data['Low'].iloc[-1]
-        forex_volume = data['Volume'].iloc[-1]
+    # Log prediction in DynamoDB
+    try:
+        predictions_table.put_item(
+            Item={
+                'UserId': str(request.user.id),
+                'PredictionType': 'Forex',
+                'ForexPair': forex_pair,
+                'PredictionValue': str(prediction[0]),
+                'Timestamp': pd.Timestamp.now().isoformat()
+            }
+        )
+    except ClientError as e:
+        logger.error(f"Error logging prediction: {e}")
 
-        forex_prediction = model.predict(pd.DataFrame([{
-            'Close': forex_close,
-            'High': forex_high,
-            'Low': forex_low,
-            'Volume': forex_volume
-        }]))
-
-        # Log prediction in DynamoDB
-        try:
-            table = dynamodb.Table('Predictions')
-            table.put_item(
-                Item={
-                    'UserId': str(request.user.id),
-                    'PredictionType': 'Forex',
-                    'ForexPair': model_filename.split('.')[0],
-                    'PredictionValue': str(forex_prediction[0]),
-                    'Timestamp': str(pd.Timestamp.now())
-                }
-            )
-        except ClientError as e:
-            logger.error(f"Error logging prediction: {e}")
-
-        formatted_forex_prediction = "{:.2f}".format(float(forex_prediction[0]))
-        return JsonResponse({"prediction": formatted_forex_prediction})
-
+    return JsonResponse({"prediction": float(prediction[0])})
 
 def get_current_closing(company):
     """Fetch current closing price for a company."""
@@ -228,18 +218,15 @@ def fetch_recent_news(company_name):
     Cache results in DynamoDB to minimize API calls.
     Track daily API usage to stay within Free Tier limits (100 requests/day).
     """
-    # Check if cached news exists and is less than 24 hours old
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('NewsCache')
-
     try:
-        response = table.get_item(Key={'Company': company_name})
+        # Check if cached news exists and is less than 24 hours old
+        response = news_cache_table.get_item(Key={'Company': company_name})
         if 'Item' in response:
             item = response['Item']
             timestamp = datetime.fromisoformat(item['Timestamp'])
             if datetime.now() - timestamp < timedelta(hours=24):
                 return item['Articles']
-    except Exception as e:
+    except ClientError as e:
         print(f"Error accessing DynamoDB: {e}")
 
     # Check daily API usage counter
@@ -264,7 +251,7 @@ def fetch_recent_news(company_name):
             articles = data.get('articles', [])
 
             # Cache the result in DynamoDB
-            table.put_item(
+            news_cache_table.put_item(
                 Item={
                     'Company': company_name,
                     'Articles': articles,
@@ -274,7 +261,6 @@ def fetch_recent_news(company_name):
 
             # Increment daily API usage counter
             cache.set(news_counter_key, count + 1, timeout=86400)  # Reset after 24 hours
-
             return articles
         else:
             print(f"Error fetching news: {response.status_code}")
@@ -290,19 +276,15 @@ def get_current_sentiment(company):
     Cache results in DynamoDB to minimize API calls.
     Track monthly API usage to stay within Free Tier limits (50,000 text units/month).
     """
-    # Initialize DynamoDB client
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('SentimentCache')
-
-    # Check if cached sentiment exists and is less than 1 hour old
     try:
-        response = table.get_item(Key={'Company': company})
+        # Check if cached sentiment exists and is less than 1 hour old
+        response = sentiment_cache_table.get_item(Key={'Company': company})
         if 'Item' in response:
             item = response['Item']
             timestamp = pd.to_datetime(item['Timestamp'])
             if (pd.Timestamp.now() - timestamp).total_seconds() < 3600:
                 return float(item['Score'])
-    except Exception as e:
+    except ClientError as e:
         print(f"Error accessing DynamoDB: {e}")
 
     # Check monthly API usage counter
@@ -315,26 +297,20 @@ def get_current_sentiment(company):
     # Fetch recent news
     articles = fetch_recent_news(company)
     if not articles:
-        return 0.5  # Default sentiment score if no news is found
+        return 0.5  # Neutral fallback
 
-    # Combine article titles and descriptions into a single text
-    sample_text = " ".join([article['title'] + " " + article['description'] for article in articles])
-    sample_text = sample_text[:5000]  # Limit to 5,000 characters (Free Tier limit)
+    # Prepare sample text for sentiment analysis
+    sample_text = " ".join([article['title'] for article in articles])[:5000]  # Limit to 5,000 characters
 
     # Perform sentiment analysis using AWS Comprehend
     comprehend = boto3.client('comprehend')
     try:
         response = comprehend.detect_sentiment(Text=sample_text, LanguageCode='en')
-        sentiment_map = {
-            'POSITIVE': 0.9,
-            'NEGATIVE': 0.1,
-            'NEUTRAL': 0.5,
-            'MIXED': 0.5
-        }
+        sentiment_map = {'POSITIVE': 0.9, 'NEGATIVE': 0.1, 'NEUTRAL': 0.5, 'MIXED': 0.5}
         sentiment_score = sentiment_map.get(response['Sentiment'], 0.5)
 
         # Cache the result in DynamoDB
-        table.put_item(
+        sentiment_cache_table.put_item(
             Item={
                 'Company': company,
                 'Score': str(sentiment_score),
@@ -344,50 +320,37 @@ def get_current_sentiment(company):
 
         # Increment monthly API usage counter
         cache.set(comprehend_counter_key, count + len(sample_text), timeout=2592000)  # Reset after 30 days
-
         return sentiment_score
     except (BotoCoreError, ClientError) as error:
         print(f"AWS Comprehend error: {error}")
-        return 0.5
+        return 0.5  # Fallback neutral value
     except Exception as e:
         print(f"Unexpected error in sentiment analysis: {e}")
         return 0.5  # Fallback neutral value
 
 
 def register(request):
-    """Render the registration page."""
+    """Handle user registration."""
     if request.method == 'POST':
         username = request.POST.get('username')
         email = request.POST.get('email')
         password = request.POST.get('password')
+        confirm_password = request.POST.get('confirm_password')
+
+        if password != confirm_password:
+            messages.error(request, 'Passwords do not match.')
+            return render(request, 'register.html')
 
         if User.objects.filter(username=username).exists():
             messages.error(request, 'Username already exists.')
             return render(request, 'register.html')
 
-        try:
-            user = User.objects.create_user(username=username, email=email, password=password)
-            user.save()
+        # Create a new user
+        user = User.objects.create_user(username=username, email=email, password=password)
+        user.save()
+        messages.success(request, 'Registration successful! Please login.')
+        return redirect('login')
 
-            # Store user info in DynamoDB (optional)
-            try:
-                table = dynamodb.Table('Users')
-                table.put_item(
-                    Item={
-                        'UserId': str(user.id),
-                        'Username': username,
-                        'Email': email,
-                        'RegistrationDate': str(pd.Timestamp.now()),
-                        'AccountType': 'Free'
-                    }
-                )
-            except ClientError as e:
-                logger.error(f"Error storing user in DynamoDB: {e}")
-
-            messages.success(request, 'Registration successful! Please login.')
-            return redirect('login')
-        except Exception as e:
-            messages.error(request, f'Registration failed: {str(e)}')
 
     return render(request, 'register.html')
 
@@ -395,19 +358,6 @@ def register(request):
 @login_required
 def logout(request):
     """Handle user logout."""
-    # Log logout event
-    try:
-        table = dynamodb.Table('UserLogins')
-        table.put_item(
-            Item={
-                'UserId': str(request.user.id),
-                'LogoutTime': str(pd.Timestamp.now()),
-                'IPAddress': request.META.get('REMOTE_ADDR', '')
-            }
-        )
-    except ClientError as e:
-        logger.error(f"Error logging logout event: {e}")
-
     logout(request)
     messages.success(request, 'You have been logged out.')
     return redirect('home')
@@ -417,18 +367,9 @@ def logout(request):
 def user_profile(request):
     """Display user profile with activity history."""
     try:
-        # Get user activities from DynamoDB
-        table = dynamodb.Table('UserActivities')
-        response = table.query(
-            KeyConditionExpression='UserId = :uid',
-            ExpressionAttributeValues={
-                ':uid': str(request.user.id)
-            },
-            Limit=10,
-            ScanIndexForward=False
-        )
-        activities = response.get('Items', [])
-    except ClientError as e:
+        # Get user activities from SQLite
+        activities = UserActivity.objects.filter(user=request.user).order_by('-timestamp')[:10]
+    except Exception as e:
         logger.error(f"Error fetching user activities: {e}")
         activities = []
 

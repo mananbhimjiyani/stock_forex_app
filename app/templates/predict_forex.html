@@ -1,10 +1,10 @@
-<!-- app/templates/predict_forex.html -->
 {% extends "base.html" %}
 
 {% block content %}
 <main>
   <h2>Predict Forex Price</h2>
-  <form method="GET" action="/predict_forex/">
+  <form method="POST" action="/predict_forex/">
+    {% csrf_token %} <!-- Add this line to include the CSRF token -->
     <label for="forex_symbol">Select Forex Pair:</label>
     <select name="forex_symbol" id="forex_symbol" required>
       {% for key, value in forex_mapping.items %}

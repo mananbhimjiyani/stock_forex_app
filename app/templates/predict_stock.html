@@ -4,7 +4,8 @@
 {% block content %}
 <main>
   <h2>Predict Stock Price</h2>
-  <form method="GET" action="/predict_stock/">
+  <form method="POST" action="/predict_stock/">
+    {% csrf_token %}
     <label for="company_symbol">Select Company:</label>
     <select name="company_symbol" id="company_symbol" required>
       {% for key, value in company_mapping.items %}
