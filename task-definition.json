@@ -1,0 +1,32 @@
+{
+  "family": "stock-forex-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::376129850308:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "stock-forex-app",
+      "image": "376129850308.dkr.ecr.us-east-1.amazonaws.com/stock-forex-app:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "ENVIRONMENT",
+          "value": "production"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        }
+      ]
+    }
+  ]
+}

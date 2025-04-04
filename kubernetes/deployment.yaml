@@ -1,19 +1,31 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: stock-forex-app
+  name: django-app-deployment
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: stock-forex-app
+      app: django-app
   template:
     metadata:
       labels:
-        app: stock-forex-app
+        app: django-app
     spec:
       containers:
-      - name: stock-forex-app
-        image: your-dockerhub-repo/stock_forex_app:latest
+      - name: django-app
+        image: 376129850308.dkr.ecr.us-east-1.amazonaws.com/stock-forex-app:latest
         ports:
         - containerPort: 8000
+        env:
+        - name: DJANGO_SECRET_KEY
+          value: "${{ secrets.DJANGO_SECRET_KEY }}"
+        - name: DJANGO_DEBUG
+          value: "False"
+        - name: DJANGO_ALLOWED_HOSTS
+          value: "http://load-balancer-931506201.us-east-1.elb.amazonaws.com/"
+        - name: AWS_ACCESS_KEY_ID
+          value: "${{ secrets.AWS_ACCESS_KEY_ID }}"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+
