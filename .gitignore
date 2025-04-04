@@ -13,4 +13,5 @@ build/
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml
+# Ignore Terraform cache and plugin directories
 .terraform/
