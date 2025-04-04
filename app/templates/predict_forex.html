@@ -1,0 +1,28 @@
+<!-- app/templates/predict_forex.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<main>
+  <h2>Predict Forex Price</h2>
+  <form method="GET" action="/predict_forex/">
+    <label for="forex_symbol">Select Forex Pair:</label>
+    <select name="forex_symbol" id="forex_symbol" required>
+      {% for key, value in forex_mapping.items %}
+        <option value="{{ key }}">{{ value }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Predict</button>
+  </form>
+
+  {% if prediction %}
+    <div class="predictions">
+      <h3>Prediction Result</h3>
+      <ul>
+        <li><strong>Predicted Forex Price:</strong> {{ prediction }}</li>
+      </ul>
+    </div>
+  {% elif error %}
+    <p class="error">{{ error }}</p>
+  {% endif %}
+</main>
+{% endblock %}

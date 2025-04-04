@@ -1,0 +1,13 @@
+<!-- app/templates/home.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<section>
+  <h2>Welcome to Stock & Forex Predictor</h2>
+  <p>This application allows you to predict stock prices and forex rates using machine learning models.</p>
+  <div class="buttons">
+    <a href="/predict_stock" class="btn">Predict Stock Price</a>
+    <a href="/predict_forex" class="btn">Predict Forex Rate</a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,438 @@
+# app/views.py
+import os
+from datetime import datetime, timedelta
+import requests
+from django.conf import settings
+from django.core.cache import cache
+from django.shortcuts import render, redirect
+from django.http import JsonResponse
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.contrib import messages
+import pandas as pd
+import joblib
+import yfinance as yf
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Define mappings (replace with your actual mappings)
+company_mapping = {
+    0: 'ADANIPORTS.NS', 1: 'APOLLOHOSP.NS', 2: 'ASIANPAINT.NS', 3: 'AXISBANK.NS',
+    4: 'BAJAJ-AUTO.NS', 5: 'BAJAJFINSV.NS', 6: 'BPCL.NS', 7: 'BRITANNIA.NS', 8: 'CIPLA.NS', 9: 'COALINDIA.NS',
+    10: 'DIVISLAB.NS', 11: 'DRREDDY.NS', 12: 'EICHERMOT.NS', 13: 'GRASIM.NS', 14: 'HCLTECH.NS', 15: 'HDFCLIFE.NS',
+    16: 'HDFCBANK.NS', 17: 'HEROMOTOCO.NS', 18: 'HINDALCO.NS', 19: 'HINDUNILVR.NS', 20: 'ICICIBANK.NS',
+    21: 'INDUSINDBK.NS', 22: 'INFY.NS', 23: 'ITC.NS', 24: 'JIOFIN.NS', 25: 'JSWSTEEL.NS', 26: 'KOTAKBANK.NS',
+    27: 'LT.NS', 28: 'LTIM.NS', 29: 'M&M.NS', 30: 'MARUTI.NS', 31: 'NESTLEIND.NS', 32: 'NIFTY50.NS', 33: 'NTPC.NS',
+    34: 'ONGC.NS', 35: 'POWERGRD.NS', 36: 'RELIANCE.NS', 37: 'SBILIFE.NS', 38: 'SBIN.NS', 39: 'SUNPHARMA.NS',
+    40: 'TCS.NS', 41: 'TATACONSUM.NS', 42: 'TATAMOTORS.NS', 43: 'TATASTEEL.NS', 44: 'TECHM.NS', 45: 'TITAN.NS',
+    46: 'ULTRACEMCO.NS', 47: 'UPL.NS', 48: 'WIPRO.NS'
+}
+
+forex_mapping = {
+    0: 'AUD-USD-ASK.joblib', 1: 'AUD-USD-BID.joblib', 2: 'EUR-USD-ASK.joblib', 3: 'EUR-USD-BID.joblib',
+    4: 'GBP-USD-ASK.joblib', 5: 'GBP-USD-BID.joblib', 6: 'NZD-USD-ASK.joblib', 7: 'NZD-USD-BID.joblib',
+    8: 'USD-CAD-ASK.joblib', 9: 'USD-CAD-BID.joblib', 10: 'USD-CHF-ASK.joblib', 11: 'USD-CHF-BID.joblib',
+    12: 'USD-JPY-ASK.joblib', 13: 'USD-JPY-BID.joblib', 14: 'XAG-USD-ASK.joblib', 15: 'XAG-USD-BID.joblib'
+}
+
+# Initialize AWS clients (using Free Tier)
+s3_client = boto3.client('s3')
+dynamodb = boto3.resource('dynamodb')
+
+@login_required
+def api_usage(request):
+    """
+    Monitor API usage for GNews and AWS Comprehend.
+    """
+    gnews_daily_counter = cache.get('gnews_daily_counter', 0)
+    comprehend_monthly_counter = cache.get('comprehend_monthly_counter', 0)
+
+    return JsonResponse({
+        'gnews_remaining_requests': 100 - gnews_daily_counter,
+        'comprehend_remaining_units': 50000 - comprehend_monthly_counter,
+    })
+
+def rate_limit(view_func):
+    def wrapped_view(request, *args, **kwargs):
+        user_key = f"rate_limit_{request.user.id}"
+        count = cache.get(user_key, 0)
+        if count >= 5:  # 5 requests per hour
+            return JsonResponse({"error": "Rate limit exceeded"}, status=429)
+        cache.set(user_key, count+1, timeout=3600)  # 1 hour
+        return view_func(request, *args, **kwargs)
+    return wrapped_view
+
+
+def home(request):
+    """Render the home page."""
+    return render(request, 'home.html')
+
+def login(request):
+    """Render the login page."""
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)  # Start a session for the user
+            return redirect('dashboard')  # Redirect to dashboard on successful login
+        else:
+            return render(request, 'login.html', {'error': 'Invalid credentials'})
+    return render(request, 'login.html')
+
+
+
+@login_required
+def dashboard(request):
+    """Render the dashboard page for authenticated users."""
+    # Store user activity in DynamoDB (AWS Free Tier)
+    try:
+        table = dynamodb.Table('UserActivities')
+        table.put_item(
+            Item={
+                'UserId': str(request.user.id),
+                'Activity': 'AccessedDashboard',
+                'Timestamp': str(pd.Timestamp.now()),
+                'UserAgent': request.META.get('HTTP_USER_AGENT', '')
+            }
+        )
+    except ClientError as e:
+        logger.error(f"Error logging user activity: {e}")
+
+    return render(request, 'dashboard.html', {'username': request.user.username})
+
+
+@login_required
+@rate_limit
+def predict_stock(request):
+    """Predict stock price (authenticated users only)."""
+    if request.method == 'GET':
+        company_symbol = request.GET.get('company_symbol')
+        try:
+            company_symbol = int(company_symbol)
+            if company_symbol not in company_mapping:
+                return JsonResponse({"error": "Invalid company_symbol."})
+        except ValueError:
+            return JsonResponse({"error": "Invalid company_symbol. It should be an integer."})
+
+        company = company_mapping[company_symbol]
+
+        try:
+            # Try to load model from S3 (AWS Free Tier)
+            model_file = 'stock_price_predictor_model.joblib'
+            s3_client.download_file('your-s3-bucket-name', f'models/{model_file}', f'/tmp/{model_file}')
+            model = joblib.load(f'/tmp/{model_file}')
+        except ClientError as e:
+            logger.error(f"Error loading model from S3: {e}")
+            # Fallback to local model if S3 fails
+            model = joblib.load('models/stock_price_predictor_model.joblib')
+
+        data = pd.DataFrame({
+            'Close_Lagged': [get_current_closing(company)],
+            'Sentiment_Score': [get_current_sentiment(company)],
+            'Company': [company_symbol],
+        })
+
+        X_test = data[['Close_Lagged', 'Sentiment_Score', 'Company']]
+        prediction = model.predict(X_test)
+
+        # Log prediction in DynamoDB
+        try:
+            table = dynamodb.Table('Predictions')
+            table.put_item(
+                Item={
+                    'UserId': str(request.user.id),
+                    'PredictionType': 'Stock',
+                    'Company': company,
+                    'PredictionValue': str(prediction[0]),
+                    'Timestamp': str(pd.Timestamp.now())
+                }
+            )
+        except ClientError as e:
+            logger.error(f"Error logging prediction: {e}")
+
+        return JsonResponse({"prediction": float(prediction[0])})
+
+
+@login_required
+@rate_limit
+def predict_forex(request):
+    """Predict forex price (authenticated users only)."""
+    if request.method == 'GET':
+        forex_symbol = int(request.GET.get('forex_symbol'))
+        if forex_symbol not in forex_mapping:
+            return JsonResponse({"error": "Invalid forex_index."})
+
+        model_filename = forex_mapping[forex_symbol]
+        try:
+            # Try to load model from S3 (AWS Free Tier)
+            s3_client.download_file('your-s3-bucket-name', f'models/{model_filename}', f'/tmp/{model_filename}')
+            model = joblib.load(f'/tmp/{model_filename}')
+        except ClientError as e:
+            logger.error(f"Error loading model from S3: {e}")
+            # Fallback to local model if S3 fails
+            model = joblib.load(f'models/{model_filename}')
+
+        forex = yf.Ticker(forex_mapping[forex_symbol])
+        data = forex.history(period="1d", interval="1m")
+
+        forex_close = data['Close'].iloc[-1]
+        forex_high = data['High'].iloc[-1]
+        forex_low = data['Low'].iloc[-1]
+        forex_volume = data['Volume'].iloc[-1]
+
+        forex_prediction = model.predict(pd.DataFrame([{
+            'Close': forex_close,
+            'High': forex_high,
+            'Low': forex_low,
+            'Volume': forex_volume
+        }]))
+
+        # Log prediction in DynamoDB
+        try:
+            table = dynamodb.Table('Predictions')
+            table.put_item(
+                Item={
+                    'UserId': str(request.user.id),
+                    'PredictionType': 'Forex',
+                    'ForexPair': model_filename.split('.')[0],
+                    'PredictionValue': str(forex_prediction[0]),
+                    'Timestamp': str(pd.Timestamp.now())
+                }
+            )
+        except ClientError as e:
+            logger.error(f"Error logging prediction: {e}")
+
+        formatted_forex_prediction = "{:.2f}".format(float(forex_prediction[0]))
+        return JsonResponse({"prediction": formatted_forex_prediction})
+
+
+def get_current_closing(company):
+    """Fetch current closing price for a company."""
+    ticker = yf.Ticker(company)
+    data = ticker.history(period="1d")
+    return data['Close'].iloc[-1]
+
+# Load environment variables
+GNEWS_API_KEY = os.getenv('GNEWS_API_KEY')
+GNEWS_BASE_URL = "https://gnews.io/api/v4/search"
+
+def fetch_recent_news(company_name):
+    """
+    Fetch recent news articles about a company using the GNews API.
+    Cache results in DynamoDB to minimize API calls.
+    Track daily API usage to stay within Free Tier limits (100 requests/day).
+    """
+    # Check if cached news exists and is less than 24 hours old
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table('NewsCache')
+
+    try:
+        response = table.get_item(Key={'Company': company_name})
+        if 'Item' in response:
+            item = response['Item']
+            timestamp = datetime.fromisoformat(item['Timestamp'])
+            if datetime.now() - timestamp < timedelta(hours=24):
+                return item['Articles']
+    except Exception as e:
+        print(f"Error accessing DynamoDB: {e}")
+
+    # Check daily API usage counter
+    news_counter_key = "gnews_daily_counter"
+    count = cache.get(news_counter_key, 0)
+    if count >= 100:  # GNews Free Tier limit
+        print("Daily GNews API limit reached. Using cached data only.")
+        return []
+
+    # Fetch news from GNews API
+    try:
+        params = {
+            'q': company_name,
+            'lang': 'en',
+            'country': 'US',
+            'max': 5,  # Limit to 5 articles per request
+            'apikey': GNEWS_API_KEY
+        }
+        response = requests.get(GNEWS_BASE_URL, params=params)
+        if response.status_code == 200:
+            data = response.json()
+            articles = data.get('articles', [])
+
+            # Cache the result in DynamoDB
+            table.put_item(
+                Item={
+                    'Company': company_name,
+                    'Articles': articles,
+                    'Timestamp': datetime.now().isoformat()
+                }
+            )
+
+            # Increment daily API usage counter
+            cache.set(news_counter_key, count + 1, timeout=86400)  # Reset after 24 hours
+
+            return articles
+        else:
+            print(f"Error fetching news: {response.status_code}")
+            return []
+    except Exception as e:
+        print(f"Unexpected error in fetching news: {e}")
+        return []
+
+
+def get_current_sentiment(company):
+    """
+    Fetch sentiment score for a company using AWS Comprehend.
+    Cache results in DynamoDB to minimize API calls.
+    Track monthly API usage to stay within Free Tier limits (50,000 text units/month).
+    """
+    # Initialize DynamoDB client
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table('SentimentCache')
+
+    # Check if cached sentiment exists and is less than 1 hour old
+    try:
+        response = table.get_item(Key={'Company': company})
+        if 'Item' in response:
+            item = response['Item']
+            timestamp = pd.to_datetime(item['Timestamp'])
+            if (pd.Timestamp.now() - timestamp).total_seconds() < 3600:
+                return float(item['Score'])
+    except Exception as e:
+        print(f"Error accessing DynamoDB: {e}")
+
+    # Check monthly API usage counter
+    comprehend_counter_key = "comprehend_monthly_counter"
+    count = cache.get(comprehend_counter_key, 0)
+    if count >= 45000:  # Leave buffer below 50,000
+        print("Monthly AWS Comprehend API limit reached. Using neutral sentiment fallback.")
+        return 0.5  # Neutral fallback
+
+    # Fetch recent news
+    articles = fetch_recent_news(company)
+    if not articles:
+        return 0.5  # Default sentiment score if no news is found
+
+    # Combine article titles and descriptions into a single text
+    sample_text = " ".join([article['title'] + " " + article['description'] for article in articles])
+    sample_text = sample_text[:5000]  # Limit to 5,000 characters (Free Tier limit)
+
+    # Perform sentiment analysis using AWS Comprehend
+    comprehend = boto3.client('comprehend')
+    try:
+        response = comprehend.detect_sentiment(Text=sample_text, LanguageCode='en')
+        sentiment_map = {
+            'POSITIVE': 0.9,
+            'NEGATIVE': 0.1,
+            'NEUTRAL': 0.5,
+            'MIXED': 0.5
+        }
+        sentiment_score = sentiment_map.get(response['Sentiment'], 0.5)
+
+        # Cache the result in DynamoDB
+        table.put_item(
+            Item={
+                'Company': company,
+                'Score': str(sentiment_score),
+                'Timestamp': pd.Timestamp.now().isoformat()
+            }
+        )
+
+        # Increment monthly API usage counter
+        cache.set(comprehend_counter_key, count + len(sample_text), timeout=2592000)  # Reset after 30 days
+
+        return sentiment_score
+    except (BotoCoreError, ClientError) as error:
+        print(f"AWS Comprehend error: {error}")
+        return 0.5
+    except Exception as e:
+        print(f"Unexpected error in sentiment analysis: {e}")
+        return 0.5  # Fallback neutral value
+
+
+def register(request):
+    """Render the registration page."""
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, 'Username already exists.')
+            return render(request, 'register.html')
+
+        try:
+            user = User.objects.create_user(username=username, email=email, password=password)
+            user.save()
+
+            # Store user info in DynamoDB (optional)
+            try:
+                table = dynamodb.Table('Users')
+                table.put_item(
+                    Item={
+                        'UserId': str(user.id),
+                        'Username': username,
+                        'Email': email,
+                        'RegistrationDate': str(pd.Timestamp.now()),
+                        'AccountType': 'Free'
+                    }
+                )
+            except ClientError as e:
+                logger.error(f"Error storing user in DynamoDB: {e}")
+
+            messages.success(request, 'Registration successful! Please login.')
+            return redirect('login')
+        except Exception as e:
+            messages.error(request, f'Registration failed: {str(e)}')
+
+    return render(request, 'register.html')
+
+
+@login_required
+def logout(request):
+    """Handle user logout."""
+    # Log logout event
+    try:
+        table = dynamodb.Table('UserLogins')
+        table.put_item(
+            Item={
+                'UserId': str(request.user.id),
+                'LogoutTime': str(pd.Timestamp.now()),
+                'IPAddress': request.META.get('REMOTE_ADDR', '')
+            }
+        )
+    except ClientError as e:
+        logger.error(f"Error logging logout event: {e}")
+
+    logout(request)
+    messages.success(request, 'You have been logged out.')
+    return redirect('home')
+
+
+@login_required
+def user_profile(request):
+    """Display user profile with activity history."""
+    try:
+        # Get user activities from DynamoDB
+        table = dynamodb.Table('UserActivities')
+        response = table.query(
+            KeyConditionExpression='UserId = :uid',
+            ExpressionAttributeValues={
+                ':uid': str(request.user.id)
+            },
+            Limit=10,
+            ScanIndexForward=False
+        )
+        activities = response.get('Items', [])
+    except ClientError as e:
+        logger.error(f"Error fetching user activities: {e}")
+        activities = []
+
+    return render(request, 'profile.html', {
+        'user': request.user,
+        'activities': activities
+    })

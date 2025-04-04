@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stock-forex-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: stock-forex-app
+  template:
+    metadata:
+      labels:
+        app: stock-forex-app
+    spec:
+      containers:
+      - name: stock-forex-app
+        image: your-dockerhub-repo/stock_forex_app:latest
+        ports:
+        - containerPort: 8000

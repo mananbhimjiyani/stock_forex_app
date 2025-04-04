@@ -1,0 +1,17 @@
+<!-- app/templates/login.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<section>
+  <h2>Login</h2>
+  <form method="POST" action="/login">
+    {% csrf_token %}
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" required>
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" required>
+    <button type="submit" class="btn">Login</button>
+  </form>
+  <p>Don't have an account? <a href="/register">Register here</a>.</p>
+</section>
+{% endblock %}

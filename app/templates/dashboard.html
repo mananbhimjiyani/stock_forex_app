@@ -1,0 +1,17 @@
+<!-- app/templates/dashboard.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<section>
+  <h2>Dashboard</h2>
+  <p>Welcome, {{ username }}!</p>
+  <div class="predictions">
+    <h3>Predictions</h3>
+    <ul>
+      <li><strong>Stock Prediction:</strong> {{ stock_prediction }}</li>
+      <li><strong>Forex Prediction:</strong> {{ forex_prediction }}</li>
+    </ul>
+  </div>
+  <a href="/" class="btn">Back to Home</a>
+</section>
+{% endblock %}

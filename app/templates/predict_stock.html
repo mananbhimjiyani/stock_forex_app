@@ -1,0 +1,28 @@
+<!-- app/templates/predict_stock.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<main>
+  <h2>Predict Stock Price</h2>
+  <form method="GET" action="/predict_stock/">
+    <label for="company_symbol">Select Company:</label>
+    <select name="company_symbol" id="company_symbol" required>
+      {% for key, value in company_mapping.items %}
+        <option value="{{ key }}">{{ value }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Predict</button>
+  </form>
+
+  {% if prediction %}
+    <div class="predictions">
+      <h3>Prediction Result</h3>
+      <ul>
+        <li><strong>Predicted Stock Price:</strong> {{ prediction }}</li>
+      </ul>
+    </div>
+  {% elif error %}
+    <p class="error">{{ error }}</p>
+  {% endif %}
+</main>
+{% endblock %}

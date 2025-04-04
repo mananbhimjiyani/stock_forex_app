@@ -1,0 +1,31 @@
+<!-- app/templates/base.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock & Forex Predictor</title>
+    {% load static %}
+  <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+  <header>
+    <h1>Stock & Forex Predictor</h1>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/predict_stock">Predict Stock</a>
+      <a href="/predict_forex">Predict Forex</a>
+      <a href="/login">Login</a>
+      <a href="/register">Register</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}
+    {% endblock %}
+  </main>
+  <footer>
+    <p>&copy; 2023 Stock & Forex Predictor</p>
+  </footer>
+</body>
+</html>
