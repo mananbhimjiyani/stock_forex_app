@@ -1,5 +1,12 @@
+# Declare the variable
+variable "aws_region" {
+  description = "AWS region to deploy resources"
+  type        = string
+}
+
+# Configure AWS provider
 provider "aws" {
-  region  = "us-east-1"
+  region = var.aws_region
   profile = "manan" # Use the 'manan' profile
 }
 
