@@ -102,5 +102,5 @@ jobs:
 
       - name: Deploy to EKS
         run: |
-          kubectl set image deployment/django-app django-app=${{ env.DOCKER_IMAGE }}
-          kubectl rollout status deployment/django-app || (kubectl rollout undo deployment/django-app && exit 1)
+          kubectl set image deployment/django-app-deployment django-app=${{ env.DOCKER_IMAGE }}
+          kubectl rollout status deployment/django-app-deployment || (kubectl rollout undo deployment/django-app-deployment && exit 1)
