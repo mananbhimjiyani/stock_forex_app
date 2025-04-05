@@ -100,7 +100,7 @@ AWS_DEFAULT_ACL = None  # To avoid PublicAccessBlock issues
 
 # Static files (CSS, JavaScript, Images)
 STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
-STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
+STATIC_URL = 'https://d1bomvpkbhm8k4.cloudfront.net/static/'
 
 # Media files (user uploads if any)
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
