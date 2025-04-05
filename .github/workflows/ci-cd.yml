@@ -24,13 +24,22 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.7.5  # (or whatever version you are using)
+          terraform_version: 1.7.5 # Replace with the desired version
 
       - name: Terraform Init
         run: terraform init
 
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -var="aws_region=${AWS_REGION}"
+
       - name: Terraform Apply
         run: terraform apply -auto-approve -var="aws_region=${AWS_REGION}"
+        env:
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+
   build-test-deploy:
     needs: terraform
     runs-on: ubuntu-latest
@@ -85,4 +94,4 @@ jobs:
       - name: Deploy to EKS
         run: |
           kubectl set image deployment/django-app django-app=${{ env.DOCKER_IMAGE }}
-          kubectl rollout status deployment/django-app
+          kubectl rollout status deployment/django-app || (kubectl rollout undo deployment/django-app && exit 1)
