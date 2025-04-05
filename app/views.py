@@ -23,6 +23,12 @@ import pandas as pd
 
 from app.models import UserActivity, Prediction
 
+# In app/views.py
+from django.http import HttpResponse
+
+def health_check(request):
+    return HttpResponse("OK", status=200)
+
 # Configure logging
 logger = logging.getLogger(__name__)
 

@@ -23,7 +23,7 @@ spec:
         - name: DJANGO_DEBUG
           value: "False"
         - name: DJANGO_ALLOWED_HOSTS
-          value: "http://load-balancer-931506201.us-east-1.elb.amazonaws.com/"
+          value: "*"
         - name: AWS_ACCESS_KEY_ID
           value: "${{ secrets.AWS_ACCESS_KEY_ID }}"
         - name: AWS_SECRET_ACCESS_KEY

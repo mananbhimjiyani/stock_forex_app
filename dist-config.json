@@ -1,0 +1,41 @@
+{
+    "CallerReference": "stock-forex-app-update",
+    "Origins": {
+        "Quantity": 1,
+        "Items": [
+            {
+                "Id": "S3-stock-forex-app",
+                "DomainName": "stock-forex-app.s3.us-east-1.amazonaws.com",
+                "OriginPath": "",
+                "S3OriginConfig": {
+                    "OriginAccessIdentity": "origin-access-identity/cloudfront/E3L10YI488IO08"
+                }
+            }
+        ]
+    },
+    "DefaultCacheBehavior": {
+        "TargetOriginId": "S3-stock-forex-app",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "AllowedMethods": {
+            "Quantity": 2,
+            "Items": ["HEAD", "GET"],
+            "CachedMethods": {
+                "Quantity": 2,
+                "Items": ["HEAD", "GET"]
+            }
+        },
+        "ForwardedValues": {
+            "QueryString": false,
+            "Cookies": { "Forward": "none" },
+            "Headers": { "Quantity": 0 }
+        },
+        "MinTTL": 0,
+        "DefaultTTL": 3600,
+        "MaxTTL": 86400
+    },
+    "Comment": "",
+    "Enabled": true,
+    "PriceClass": "PriceClass_All",
+    "HttpVersion": "http2",
+    "IsIPV6Enabled": false
+}

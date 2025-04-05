@@ -1,0 +1,11 @@
+# Ignore unnecessary files and directories
+__pycache__/
+venv/
+node_modules/
+.git/
+*.log
+*.gz
+*.zip
+*.tgz
+models/
+terraform/

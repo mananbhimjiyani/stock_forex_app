@@ -3,10 +3,10 @@ kind: Service
 metadata:
   name: django-app-service
 spec:
-  type: LoadBalancer
+  type: ClusterIP  # Not LoadBalancer (since Ingress manages external traffic)
   selector:
     app: django-app
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 8000
+    - protocol: TCP
+      port: 80      # Port the Ingress will use
+      targetPort: 8000  # Must match your Django container port
