@@ -10,6 +10,12 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
+AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+
+AWS_ACCESS_KEY_ID=os.getenv('AWS_ACCESS_KEY_ID')
+
+AWS_SECRET_ACCESS_KEY=os.getenv('AWS_SECRET_ACCESS_KEY')
+
 ALLOWED_HOSTS = ["*"]
 
 # Application definition

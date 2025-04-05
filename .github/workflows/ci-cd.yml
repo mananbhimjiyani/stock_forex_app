@@ -12,7 +12,7 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
   ECR_REPO: ${{ secrets.ECR_REPO }}
-  DOCKER_IMAGE: 376129850308.dkr.ecr.us-east-1.amazonaws.com/stock-forex-app:latest
+  DOCKER_IMAGE: 376129850308.dkr.ecr.us-east-1.amazonaws.com/stock-forex-app:${{ github.sha }}
 
 jobs:
   terraform:
@@ -99,4 +99,5 @@ jobs:
       - name: Deploy to EKS
         run: |
           kubectl set image deployment/django-app-deployment django-app=${{ env.DOCKER_IMAGE }}
+          kubectl rollout restart deployment django-app-deployment
           kubectl rollout status deployment/django-app-deployment || (kubectl rollout undo deployment/django-app-deployment && exit 1)
