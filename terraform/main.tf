@@ -10,8 +10,7 @@ variable "bucket_name" {
 }
 
 provider "aws" {
-  region  = var.aws_region
-  profile = "manan" # Use the 'manan' profile
+  region = var.aws_region
 }
 
 # S3 Bucket for static files
