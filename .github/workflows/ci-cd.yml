@@ -50,13 +50,12 @@ jobs:
           -var="aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
 
       - name: Terraform Apply
-        if: github.event_name == 'push'
         working-directory: ./terraform
         run: |
           terraform apply -auto-approve \
-          var="aws_region=${{ env.AWS_REGION }}" \
-          var="aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" \
-          var="aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -var="aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
   build-test-deploy:
     needs: terraform
     runs-on: ubuntu-latest
