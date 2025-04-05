@@ -68,20 +68,21 @@ resource "aws_cloudfront_distribution" "cdn" {
     cloudfront_default_certificate = true
   }
 }
+
 # S3 Bucket Policy to restrict access to CloudFront OAI
 resource "aws_s3_bucket_policy" "static_files_policy" {
   bucket = aws_s3_bucket.static_files.bucket
 
   policy = jsonencode({
-    Version = "2012-10-17"
+    Version = "2012-10-17",
     Statement = [
       {
-        Effect    = "Allow"
+        Effect = "Allow",
         Principal = {
           AWS = aws_cloudfront_origin_access_identity.oai.iam_arn
-        }
-        Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.static_files.arn}/*"
+        },
+        Action   = "s3:GetObject",
+        Resource = "${aws_s3_bucket.static_files.arn}/*"
       }
     ]
   })
