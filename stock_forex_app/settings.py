@@ -5,12 +5,12 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "your-default-secret-key")
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = ["your-domain.com", "your-cloudfront-distribution.cloudfront.net"]
+ALLOWED_HOSTS = ["*"]
 
 # Application definition
 INSTALLED_APPS = [
@@ -24,7 +24,7 @@ INSTALLED_APPS = [
 
     # Third-party apps
     'storages',  # for S3 storage
-    # your apps...
+    'app'
 ]
 
 MIDDLEWARE = [
@@ -55,7 +55,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'your_project.wsgi.application'
+WSGI_APPLICATION = 'stock_forex_app.wsgi.application'
 
 # Database
 DATABASES = {
@@ -100,7 +100,7 @@ AWS_DEFAULT_ACL = None  # To avoid PublicAccessBlock issues
 
 # Static files (CSS, JavaScript, Images)
 STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
-STATIC_URL = 'https://d1bomvpkbhm8k4.cloudfront.net/static/'
+STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/static/"
 
 # Media files (user uploads if any)
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
