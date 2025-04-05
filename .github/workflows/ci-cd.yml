@@ -12,7 +12,7 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
   ECR_REPO: ${{ secrets.ECR_REPO }}
-  DOCKER_IMAGE: ${{ secrets.ECR_REPO }}/django-app:latest
+  DOCKER_IMAGE: 376129850308.dkr.ecr.us-east-1.amazonaws.com/stock-forex-app:latest
 
 jobs:
   terraform:
@@ -72,6 +72,10 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
+
+#      - name: Run Django tests
+#        run: |
+#          python manage.py test
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2

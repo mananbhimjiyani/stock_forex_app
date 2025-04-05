@@ -37,7 +37,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'your_project.urls'
+ROOT_URLCONF = 'stock_forex_app.urls'
 
 TEMPLATES = [
     {
