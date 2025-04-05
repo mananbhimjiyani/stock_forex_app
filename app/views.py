@@ -47,6 +47,7 @@ dynamodb = boto3.resource(
     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
 )
 
+
 # Reference DynamoDB tables
 news_cache_table = dynamodb.Table('NewsCache')
 sentiment_cache_table = dynamodb.Table('SentimentCache')
@@ -72,6 +73,39 @@ forex_mapping = {
     8: 'USD-CAD-ASK.joblib', 9: 'USD-CAD-BID.joblib', 10: 'USD-CHF-ASK.joblib', 11: 'USD-CHF-BID.joblib',
     12: 'USD-JPY-ASK.joblib', 13: 'USD-JPY-BID.joblib', 14: 'XAG-USD-ASK.joblib', 15: 'XAG-USD-BID.joblib'
 }
+
+def load_model_from_s3(bucket_name, model_key):
+    """
+    Downloads a model file from S3 and loads it using joblib.
+    """
+    # Initialize the S3 client
+    s3 = boto3.client('s3')
+
+    # Define the local path for the downloaded model
+    local_path = os.path.join('/tmp', model_key.split('/')[-1])
+
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+    # Download the model file if it doesn't already exist locally
+    if not os.path.exists(local_path):
+        logger.info(f"Downloading model from S3: {model_key}")
+        try:
+            s3.download_file(bucket_name, model_key, local_path)
+        except Exception as e:
+            logger.error(f"Error downloading model from S3: {e}")
+            raise
+    else:
+        logger.info(f"Model already exists locally: {local_path}")
+
+    # Load the model using joblib
+    try:
+        model = joblib.load(local_path)
+        return model
+    except Exception as e:
+        logger.error(f"Error loading model with joblib: {e}")
+        raise
+
 
 @login_required
 def api_usage(request):
@@ -145,9 +179,11 @@ def predict_stock(request):
     company = request.GET.get('company')
     company_symbol = request.GET.get('symbol')
 
-    # Load model (example assumes S3 or local model loading logic)
+    # Load model from S3
+    bucket_name = 'your-s3-bucket-name'  # Replace with your S3 bucket name
+    model_key = 'models/stock_price_predictor_model.joblib'  # Replace with your model's S3 key
     try:
-        model = joblib.load('models/stock_price_predictor_model.joblib')
+        model = load_model_from_s3(bucket_name, model_key)
     except Exception as e:
         logger.error(f"Error loading model: {e}")
         return JsonResponse({"error": "Model loading failed."}, status=500)
@@ -186,9 +222,11 @@ def predict_forex(request):
     """
     forex_pair = request.GET.get('pair')
 
-    # Load model (example assumes S3 or local model loading logic)
+    # Load model from S3
+    bucket_name = 'your-s3-bucket-name'  # Replace with your S3 bucket name
+    model_key = f'models/{forex_pair}.joblib'  # Replace with your model's S3 key
     try:
-        model = joblib.load(f'models/{forex_pair}.joblib')
+        model = load_model_from_s3(bucket_name, model_key)
     except Exception as e:
         logger.error(f"Error loading model: {e}")
         return JsonResponse({"error": "Model loading failed."}, status=500)
@@ -218,11 +256,42 @@ def predict_forex(request):
 
     return JsonResponse({"prediction": float(prediction[0])})
 
-def get_current_closing(company):
-    """Fetch current closing price for a company."""
-    ticker = yf.Ticker(company)
+# Helper Functions
+def get_current_closing(forex_pair):
+    """Fetch current closing price for a forex pair."""
+    ticker = yf.Ticker(f"{forex_pair}=X")  # Forex pairs use '=X' suffix in Yahoo Finance
     data = ticker.history(period="1d")
+    if data.empty:
+        logger.warning(f"No data found for forex pair: {forex_pair}")
+        return 0.0
     return data['Close'].iloc[-1]
+
+def get_current_high(forex_pair):
+    """Fetch current high price for a forex pair."""
+    ticker = yf.Ticker(f"{forex_pair}=X")
+    data = ticker.history(period="1d")
+    if data.empty:
+        logger.warning(f"No data found for forex pair: {forex_pair}")
+        return 0.0
+    return data['High'].iloc[-1]
+
+def get_current_low(forex_pair):
+    """Fetch current low price for a forex pair."""
+    ticker = yf.Ticker(f"{forex_pair}=X")
+    data = ticker.history(period="1d")
+    if data.empty:
+        logger.warning(f"No data found for forex pair: {forex_pair}")
+        return 0.0
+    return data['Low'].iloc[-1]
+
+def get_current_volume(forex_pair):
+    """Fetch current trading volume for a forex pair."""
+    ticker = yf.Ticker(f"{forex_pair}=X")
+    data = ticker.history(period="1d")
+    if data.empty:
+        logger.warning(f"No data found for forex pair: {forex_pair}")
+        return 0.0
+    return data['Volume'].iloc[-1]
 
 # Load environment variables
 GNEWS_API_KEY = os.getenv('GNEWS_API_KEY')
