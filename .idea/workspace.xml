@@ -5,7 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="83a9703f-b224-428c-a46a-c6bff871194a" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.github/workflows/ci-cd.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/ci-cd.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/stock_forex_app/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/stock_forex_app/settings.py" afterDir="false" />
     </list>
@@ -125,7 +124,7 @@
       <workItem from="1743768942757" duration="211000" />
       <workItem from="1743769160332" duration="32932000" />
       <workItem from="1743829283320" duration="227000" />
-      <workItem from="1743829596372" duration="29347000" />
+      <workItem from="1743829596372" duration="29760000" />
     </task>
     <servers />
   </component>

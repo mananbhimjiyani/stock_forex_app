@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
+DEBUG = "True"
 
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
 
@@ -106,7 +106,7 @@ AWS_DEFAULT_ACL = None  # To avoid PublicAccessBlock issues
 
 # Static files (CSS, JavaScript, Images)
 STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
-STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/static/"
+STATIC_URL = f"https://d1bomvpkbhm8k4.cloudfront.net/static/"
 
 # Media files (user uploads if any)
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
