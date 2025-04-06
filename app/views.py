@@ -18,6 +18,7 @@ import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 import pandas as pd
+from django.contrib.auth import logout as auth_logout
 
 from app.models import UserActivity, Prediction
 
@@ -148,7 +149,6 @@ def rate_limit(view_func):
 def home(request):
     """Render the home page."""
     return render(request, 'home.html')
-
 
 def user_login(request):
     """Handle user login."""
@@ -574,21 +574,53 @@ def register(request):
     return render(request, 'register.html')
 
 
-@login_required
-def logout(request):
-    """Handle user logout."""
-    logout(request)
-    messages.success(request, 'You have been logged out.')
+def custom_logout(request):
+    """
+    Handle user logout with custom logic.
+    """
+    try:
+        # Log logout event in DynamoDB
+        if request.user.is_authenticated:
+            dynamodb = boto3.resource('dynamodb')
+            table = dynamodb.Table('UserLogins')
+            table.put_item(Item={
+                'UserId': str(request.user.id),
+                'LogoutTime': str(pd.Timestamp.now()),
+                'IPAddress': request.META.get('REMOTE_ADDR', '')
+            })
+
+        # Perform logout using Django's built-in logout function
+        auth_logout(request)
+
+        # Add success message
+        messages.success(request, 'You have been logged out.')
+
+    except Exception as e:
+        # Log any errors during logout
+        logger.error(f"Error during logout: {e}")
+        messages.error(request, 'An error occurred while logging out.')
+
+    # Always redirect to the home page
     return redirect('home')
 
 
 @login_required
 def user_profile(request):
-    """Display user profile with activity history."""
+    """
+    Display user profile with activity history.
+    """
     try:
-        # Get user activities from SQLite
-        activities = UserActivity.objects.filter(user=request.user).order_by('-timestamp')[:10]
-    except Exception as e:
+        # Fetch user activities from DynamoDB
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table('UserActivities')
+        response = table.query(
+            KeyConditionExpression='UserId = :uid',
+            ExpressionAttributeValues={':uid': str(request.user.id)},
+            Limit=10,  # Show the last 10 activities
+            ScanIndexForward=False  # Sort by most recent first
+        )
+        activities = response.get('Items', [])
+    except ClientError as e:
         logger.error(f"Error fetching user activities: {e}")
         activities = []
 

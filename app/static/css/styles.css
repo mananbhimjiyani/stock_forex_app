@@ -118,3 +118,48 @@ form button:hover {
   text-align: center;
   margin: 20px 0;
 }
+
+/* Navigation Bar */
+nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #333;
+  padding: 10px 20px;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+  margin: 0 10px;
+}
+
+nav a:hover {
+  text-decoration: underline;
+}
+
+nav span {
+  color: #f4f4f4;
+  font-weight: bold;
+}
+/* app/static/css/styles.css */
+.user-info {
+  margin-bottom: 20px;
+}
+
+.activity-history ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.activity-history li {
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  padding: 10px;
+  margin-bottom: 5px;
+  border-radius: 5px;
+}
+
+.activity-history small {
+  color: #666;
+}

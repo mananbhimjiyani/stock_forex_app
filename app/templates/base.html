@@ -1,23 +1,32 @@
-<!-- app/templates/base.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stock & Forex Predictor</title>
-    {% load static %}
+  {% load static %}
   <link rel="stylesheet" href="{% static 'css/styles.css' %}">
 </head>
 <body>
   <header>
     <h1>Stock & Forex Predictor</h1>
     <nav>
+      <!-- Common Links -->
       <a href="/">Home</a>
-      <a href="/predict_stock">Predict Stock</a>
-      <a href="/predict_forex">Predict Forex</a>
-      <a href="/login">Login</a>
-      <a href="/register">Register</a>
+
+      <!-- Conditional Links Based on Authentication Status -->
+      {% if request.user.is_authenticated %}
+        <!-- Links for Logged-In Users -->
+        <a href="/predict_stock">Predict Stock</a>
+        <a href="/predict_forex">Predict Forex</a>
+        <a href="/profile">Profile</a> <!-- Link to Profile Page -->
+        <a href="/logout">Logout</a>
+        <span>Welcome, {{ request.user.username }}!</span>
+      {% else %}
+        <!-- Links for Non-Logged-In Users -->
+        <a href="/login">Login</a>
+        <a href="/register">Register</a>
+      {% endif %}
     </nav>
   </header>
   <main>

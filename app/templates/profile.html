@@ -4,8 +4,13 @@
 {% block content %}
 <main>
   <h2>User Profile</h2>
-  <p><strong>Username:</strong> {{ user.username }}</p>
-  <p><strong>Email:</strong> {{ user.email }}</p>
-  <a href="/logout/" class="btn">Logout</a>
+  
+  <!-- User Information -->
+  <section class="user-info">
+    <p><strong>Username:</strong> {{ user.username }}</p>
+    <p><strong>Email:</strong> {{ user.email }}</p>
+    <a href="/logout/" class="btn">Logout</a>
+  </section>
+
 </main>
 {% endblock %}

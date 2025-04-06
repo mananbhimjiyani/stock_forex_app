@@ -7,8 +7,8 @@ urlpatterns = [
     path('predict_stock/', views.predict_stock, name='predict_stock'),
     path('predict_forex/', views.predict_forex, name='predict_forex'),
     path('login/', views.user_login, name='login'),
-    path('logout/', views.logout, name='logout'),
+    path('logout/', views.custom_logout, name='logout'),
     path('register/', views.register, name='register'),
-    path('dashboard/', views.dashboard, name='dashboard'),
     path('health/', views.health_check, name='health_check'),
+    path('profile/', views.user_profile, name='user_profile'),
 ]
