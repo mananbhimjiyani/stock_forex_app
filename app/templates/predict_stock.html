@@ -15,14 +15,18 @@
     <button type="submit">Predict</button>
   </form>
 
+  <!-- Display Prediction Result -->
   {% if prediction %}
     <div class="predictions">
       <h3>Prediction Result</h3>
       <ul>
-        <li><strong>Predicted Stock Price:</strong> {{ prediction }}</li>
+        <li><strong>Predicted Stock Price:</strong> {{ prediction }} INR </li>
       </ul>
     </div>
-  {% elif error %}
+  {% endif %}
+
+  <!-- Display Error Message -->
+  {% if error %}
     <p class="error">{{ error }}</p>
   {% endif %}
 </main>

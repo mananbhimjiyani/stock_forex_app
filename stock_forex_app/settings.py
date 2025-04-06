@@ -1,5 +1,8 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Base Directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,9 +15,9 @@ DEBUG = "FALSE"
 
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
 
-AWS_ACCESS_KEY_ID=os.getenv('AWS_ACCESS_KEY_ID')
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 
-AWS_SECRET_ACCESS_KEY=os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 
 ALLOWED_HOSTS = ["*"]
 
@@ -22,11 +25,11 @@ ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     # Django apps...
     'django.contrib.admin',
-    'django.contrib.auth',
     'django.contrib.contenttypes',
-    'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.auth',  # Required for auth
+    'django.contrib.sessions',  # Required for sessions
 
     # Third-party apps
     'storages',  # for S3 storage
@@ -35,13 +38,22 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',  # Required for sessions
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',  # Required for authentication
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# DynamoDB Configuration
+DYNAMODB_TABLES = {
+    "NewsCache": "NewsCache",
+    "SentimentCache": "SentimentCache",
+    "Predictions": "Predictions",
+    "UserActivities": "UserActivities",
+    "Users": "Users",
+}
 
 ROOT_URLCONF = 'stock_forex_app.urls'
 
@@ -66,25 +78,21 @@ WSGI_APPLICATION = 'stock_forex_app.wsgi.application'
 # Database
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.dummy',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
-# Password validation
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
+# DynamoDB Session Configuration
+# Add these settings
+SESSION_ENGINE = 'app.dynamodb_session_backend'
+DYNAMODB_SESSIONS_TABLE_NAME = 'django_sessions'
+SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
+
+# Required for DynamoDB sessions
+AWS_DYNAMODB_SESSION_TABLE_NAME = 'django_sessions'
+AWS_DYNAMODB_REGION = os.getenv('AWS_REGION', 'us-east-1')
+
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'

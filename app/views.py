@@ -1,8 +1,6 @@
 # app/views.py
 import os
-from datetime import datetime, timedelta
 
-import boto3
 import requests
 from botocore.exceptions import ClientError, BotoCoreError
 from django.conf import settings
@@ -26,8 +24,10 @@ from app.models import UserActivity, Prediction
 # In app/views.py
 from django.http import HttpResponse
 
+
 def health_check(request):
     return HttpResponse("OK", status=200)
+
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -46,7 +46,6 @@ dynamodb = boto3.resource(
     aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
 )
-
 
 # Reference DynamoDB tables
 news_cache_table = dynamodb.Table('NewsCache')
@@ -68,11 +67,24 @@ company_mapping = {
 }
 
 forex_mapping = {
-    0: 'AUD-USD-ASK.joblib', 1: 'AUD-USD-BID.joblib', 2: 'EUR-USD-ASK.joblib', 3: 'EUR-USD-BID.joblib',
-    4: 'GBP-USD-ASK.joblib', 5: 'GBP-USD-BID.joblib', 6: 'NZD-USD-ASK.joblib', 7: 'NZD-USD-BID.joblib',
-    8: 'USD-CAD-ASK.joblib', 9: 'USD-CAD-BID.joblib', 10: 'USD-CHF-ASK.joblib', 11: 'USD-CHF-BID.joblib',
-    12: 'USD-JPY-ASK.joblib', 13: 'USD-JPY-BID.joblib', 14: 'XAG-USD-ASK.joblib', 15: 'XAG-USD-BID.joblib'
+    0: {'name': 'AUD/USD ASK', 'model_file': 'AUD-USD-ASK.joblib', 'symbol': 'AUDUSD=X'},
+    1: {'name': 'AUD/USD BID', 'model_file': 'AUD-USD-BID.joblib', 'symbol': 'AUDUSD=X'},
+    2: {'name': 'EUR/USD ASK', 'model_file': 'EUR-USD-ASK.joblib', 'symbol': 'EURUSD=X'},
+    3: {'name': 'EUR/USD BID', 'model_file': 'EUR-USD-BID.joblib', 'symbol': 'EURUSD=X'},
+    4: {'name': 'GBP/USD ASK', 'model_file': 'GBP-USD-ASK.joblib', 'symbol': 'GBPUSD=X'},
+    5: {'name': 'GBP/USD BID', 'model_file': 'GBP-USD-BID.joblib', 'symbol': 'GBPUSD=X'},
+    6: {'name': 'NZD/USD ASK', 'model_file': 'NZD-USD-ASK.joblib', 'symbol': 'NZDUSD=X'},
+    7: {'name': 'NZD/USD BID', 'model_file': 'NZD-USD-BID.joblib', 'symbol': 'NZDUSD=X'},
+    8: {'name': 'USD/CAD ASK', 'model_file': 'USD-CAD-ASK.joblib', 'symbol': 'USDCAD=X'},
+    9: {'name': 'USD/CAD BID', 'model_file': 'USD-CAD-BID.joblib', 'symbol': 'USDCAD=X'},
+    10: {'name': 'USD/CHF ASK', 'model_file': 'USD-CHF-ASK.joblib', 'symbol': 'USDCHF=X'},
+    11: {'name': 'USD/CHF BID', 'model_file': 'USD-CHF-BID.joblib', 'symbol': 'USDCHF=X'},
+    12: {'name': 'USD/JPY ASK', 'model_file': 'USD-JPY-ASK.joblib', 'symbol': 'USDJPY=X'},
+    13: {'name': 'USD/JPY BID', 'model_file': 'USD-JPY-BID.joblib', 'symbol': 'USDJPY=X'},
+    14: {'name': 'XAG/USD ASK', 'model_file': 'XAG-USD-ASK.joblib', 'symbol': 'XAGUSD=X'},
+    15: {'name': 'XAG/USD BID', 'model_file': 'XAG-USD-BID.joblib', 'symbol': 'XAGUSD=X'},
 }
+
 
 def load_model_from_s3(bucket_name, model_key):
     """
@@ -119,20 +131,24 @@ def api_usage(request):
         'gnews_daily_usage': gnews_daily_counter,
         'comprehend_monthly_usage': comprehend_monthly_counter
     })
+
+
 def rate_limit(view_func):
     def wrapped_view(request, *args, **kwargs):
         user_key = f"rate_limit_{request.user.id}"
         count = cache.get(user_key, 0)
         if count >= 5:  # 5 requests per hour
             return JsonResponse({"error": "Rate limit exceeded"}, status=429)
-        cache.set(user_key, count+1, timeout=3600)  # 1 hour
+        cache.set(user_key, count + 1, timeout=3600)  # 1 hour
         return view_func(request, *args, **kwargs)
+
     return wrapped_view
 
 
 def home(request):
     """Render the home page."""
     return render(request, 'home.html')
+
 
 def user_login(request):
     """Handle user login."""
@@ -149,19 +165,16 @@ def user_login(request):
     return render(request, 'login.html')
 
 
-
 @login_required
 def dashboard(request):
-    """
-    Render the dashboard page for authenticated users.
-    Store user activity in DynamoDB (AWS Free Tier).
-    """
+    """Render the dashboard page for authenticated users."""
     try:
+        # Store user activity in DynamoDB
         user_activities_table.put_item(
             Item={
                 'UserId': str(request.user.id),
                 'Activity': 'AccessedDashboard',
-                'Timestamp': pd.Timestamp.now().isoformat(),
+                'Timestamp': datetime.now().isoformat(),
                 'UserAgent': request.META.get('HTTP_USER_AGENT', '')
             }
         )
@@ -169,133 +182,255 @@ def dashboard(request):
         logger.error(f"Error logging user activity: {e}")
 
     return render(request, 'dashboard.html', {'username': request.user.username})
+
+# Load environment variables
+bucket_name = 'stock-forex-app'  # Replace with your S3 bucket name
+
 @login_required
 @rate_limit
 def predict_stock(request):
-    """
-    Predict stock price (authenticated users only).
-    Log predictions in DynamoDB.
-    """
-    company = request.GET.get('company')
-    company_symbol = request.GET.get('symbol')
+    # Initialize variables for rendering
+    prediction = None
+    error = None
 
-    # Load model from S3
-    bucket_name = 'your-s3-bucket-name'  # Replace with your S3 bucket name
-    model_key = 'models/stock_price_predictor_model.joblib'  # Replace with your model's S3 key
-    try:
-        model = load_model_from_s3(bucket_name, model_key)
-    except Exception as e:
-        logger.error(f"Error loading model: {e}")
-        return JsonResponse({"error": "Model loading failed."}, status=500)
+    if request.method == "GET":
+        # Render the form with company mapping for selection
+        return render(request, "predict_stock.html", {"company_mapping": company_mapping})
 
-    # Prepare data for prediction
-    data = pd.DataFrame({
-        'Close_Lagged': [get_current_closing(company)],
-        'Sentiment_Score': [get_current_sentiment(company)],
-        'Company': [company_symbol]
-    })
-    X_test = data[['Close_Lagged', 'Sentiment_Score', 'Company']]
-    prediction = model.predict(X_test)
+    elif request.method == "POST":
+        try:
+            # Extract company symbol from POST request
+            company_symbol = request.POST.get("company_symbol")
+            if not company_symbol:
+                error = "Missing company_symbol"
+                return render(request, "predict_stock.html", {"company_mapping": company_mapping, "error": error})
 
-    # Log prediction in DynamoDB
-    try:
-        predictions_table.put_item(
-            Item={
-                'UserId': str(request.user.id),
-                'PredictionType': 'Stock',
-                'Company': company,
-                'PredictionValue': str(prediction[0]),
-                'Timestamp': pd.Timestamp.now().isoformat()
-            }
-        )
-    except ClientError as e:
-        logger.error(f"Error logging prediction: {e}")
+            # Validate the symbol against the mapping
+            try:
+                company_symbol = int(company_symbol)
+                if company_symbol not in company_mapping:
+                    error = "Invalid company_symbol."
+                    return render(request, "predict_stock.html", {"company_mapping": company_mapping, "error": error})
+            except ValueError:
+                error = "Invalid company_symbol. It should be an integer."
+                return render(request, "predict_stock.html", {"company_mapping": company_mapping, "error": error})
 
-    return JsonResponse({"prediction": float(prediction[0])})
+            company = company_mapping[company_symbol]
 
-@login_required
+            # Fetch stock data (closing price)
+            closing_price = get_current_closing(company)
+            if closing_price is None:
+                error = "Failed to fetch stock data."
+                return render(request, "predict_stock.html", {"company_mapping": company_mapping, "error": error})
+
+            # Load model from S3 or fallback to local storage
+            try:
+                bucket_name = 'stock-forex-app'  # Replace with your S3 bucket name
+                model_key = 'models/stock_price_predictor_model.joblib'
+                s3_client = boto3.client('s3')
+                s3_client.download_file(bucket_name, model_key, '/tmp/stock_price_predictor_model.joblib')
+                model = joblib.load('/tmp/stock_price_predictor_model.joblib')
+            except Exception as e:
+                logger.error(f"Error loading model: {e}")
+                error = "Model loading failed."
+                return render(request, "predict_stock.html", {"company_mapping": company_mapping, "error": error})
+
+            # Prepare data for prediction
+            try:
+                data = pd.DataFrame({
+                    'Close_Lagged': [closing_price],
+                    'Sentiment_Score': [get_current_sentiment(company)],
+                    'Company': [company_symbol],
+                })
+                X_test = data[['Close_Lagged', 'Sentiment_Score', 'Company']]
+                prediction = model.predict(X_test)[0]
+            except Exception as e:
+                logger.error(f"Error during prediction: {e}")
+                error = "Prediction failed."
+                return render(request, "predict_stock.html", {"company_mapping": company_mapping, "error": error})
+
+            # Log prediction in DynamoDB
+            try:
+                dynamodb = boto3.resource('dynamodb')
+                table = dynamodb.Table('Predictions')
+                table.put_item(Item={
+                    'UserId': str(request.user.id),
+                    'PredictionType': 'Stock',
+                    'Company': company,
+                    'PredictionValue': str(prediction),
+                    'Timestamp': pd.Timestamp.now().isoformat(),
+                })
+            except ClientError as e:
+                logger.error(f"Error logging prediction: {e}")
+
+            # Render the template with the prediction result
+            return render(request, "predict_stock.html", {
+                "company_mapping": company_mapping,
+                "prediction": prediction,
+            })
+
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            error = "An unexpected error occurred."
+            return JsonResponse({"error": "An unexpected error occurred."}, status=500)
+
+
 @rate_limit
+@login_required
 def predict_forex(request):
-    """
-    Predict forex price (authenticated users only).
-    Log predictions in DynamoDB.
-    """
-    forex_pair = request.GET.get('pair')
+    # Initialize variables for rendering
+    prediction = None
+    error = None
 
-    # Load model from S3
-    bucket_name = 'your-s3-bucket-name'  # Replace with your S3 bucket name
-    model_key = f'models/{forex_pair}.joblib'  # Replace with your model's S3 key
+    if request.method == "GET":
+        # Render the form with forex mapping for selection
+        return render(request, "predict_forex.html", {"forex_mapping": forex_mapping})
+
+    elif request.method == "POST":
+        try:
+            # Extract forex symbol from POST request
+            forex_symbol = request.POST.get("forex_symbol")
+            if not forex_symbol:
+                error = "Missing forex_symbol"
+                return render(request, "predict_forex.html", {"forex_mapping": forex_mapping, "error": error})
+
+            # Validate the symbol against the mapping
+            try:
+                forex_symbol = int(forex_symbol)
+                if forex_symbol not in forex_mapping:
+                    error = "Invalid forex_symbol."
+                    return render(request, "predict_forex.html", {"forex_mapping": forex_mapping, "error": error})
+            except ValueError:
+                error = "Invalid forex_symbol. It should be an integer."
+                return render(request, "predict_forex.html", {"forex_mapping": forex_mapping, "error": error})
+
+            # Get the forex pair details
+            forex_pair_details = forex_mapping[forex_symbol]
+            forex_pair_name = forex_pair_details['name']  # User-friendly name
+            model_file = forex_pair_details['model_file']  # Actual .joblib filename
+            symbol = forex_pair_details['symbol']  # Correct symbol for yfinance
+
+            # Load model from S3 or fallback to local storage
+            bucket_name = 'stock-forex-app'  # Replace with your S3 bucket name
+            model_key = f'models/{model_file}'  # Path to the model in S3
+            try:
+                s3_client = boto3.client('s3')
+                s3_client.download_file(bucket_name, model_key, f'/tmp/{model_file}')
+                model = joblib.load(f'/tmp/{model_file}')
+            except Exception as e:
+                logger.error(f"Error loading model: {e}")
+                error = "Model loading failed."
+                return render(request, "predict_forex.html", {"forex_mapping": forex_mapping, "error": error})
+
+            # Prepare data for prediction
+            try:
+                closing_price = get_current_closing(symbol)
+                high_price = get_current_high(symbol)
+                low_price = get_current_low(symbol)
+                volume = get_current_volume(symbol)
+
+                if closing_price is None or high_price is None or low_price is None or volume is None:
+                    error = "Failed to fetch forex data."
+                    return render(request, "predict_forex.html", {"forex_mapping": forex_mapping, "error": error})
+
+                data = pd.DataFrame({
+                    'Close': [closing_price],
+                    'High': [high_price],
+                    'Low': [low_price],
+                    'Volume': [volume]
+                })
+                prediction = model.predict(data)[0]
+            except Exception as e:
+                logger.error(f"Error during prediction: {e}")
+                error = "Prediction failed."
+                return render(request, "predict_forex.html", {"forex_mapping": forex_mapping, "error": error})
+
+            # Log prediction in DynamoDB
+            try:
+                dynamodb = boto3.resource('dynamodb')
+                table = dynamodb.Table('Predictions')
+                table.put_item(Item={
+                    'UserId': str(request.user.id),
+                    'PredictionType': 'Forex',
+                    'ForexPair': forex_pair_name,  # Use the user-friendly name
+                    'PredictionValue': str(prediction),
+                    'Timestamp': pd.Timestamp.now().isoformat()
+                })
+            except ClientError as e:
+                logger.error(f"Error logging prediction: {e}")
+
+            # Render the template with the prediction result
+            return render(request, "predict_forex.html", {
+                "forex_mapping": forex_mapping,
+                "prediction": prediction,
+                "forex_pair_name": forex_pair_name,  # Pass the user-friendly name to the frontend
+            })
+
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            error = "An unexpected error occurred."
+            return render(request, "predict_forex.html", {"forex_mapping": forex_mapping, "error": error})
+
+def get_current_closing(symbol):
+    """
+    Fetch current closing price for a stock or forex pair.
+    """
     try:
-        model = load_model_from_s3(bucket_name, model_key)
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="1d")
+        if data.empty:
+            raise ValueError(f"No data found for symbol: {symbol}")
+        return data['Close'].iloc[-1]
     except Exception as e:
-        logger.error(f"Error loading model: {e}")
-        return JsonResponse({"error": "Model loading failed."}, status=500)
+        logger.error(f"Error fetching closing price for {symbol}: {e}")
+        return None
 
-    # Prepare data for prediction
-    data = pd.DataFrame({
-        'Close': [get_current_closing(forex_pair)],
-        'High': [get_current_high(forex_pair)],
-        'Low': [get_current_low(forex_pair)],
-        'Volume': [get_current_volume(forex_pair)]
-    })
-    prediction = model.predict(data)
-
-    # Log prediction in DynamoDB
+def get_current_high(symbol):
+    """
+    Fetch current high price for a stock or forex pair.
+    """
     try:
-        predictions_table.put_item(
-            Item={
-                'UserId': str(request.user.id),
-                'PredictionType': 'Forex',
-                'ForexPair': forex_pair,
-                'PredictionValue': str(prediction[0]),
-                'Timestamp': pd.Timestamp.now().isoformat()
-            }
-        )
-    except ClientError as e:
-        logger.error(f"Error logging prediction: {e}")
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="1d")
+        if data.empty:
+            raise ValueError(f"No data found for symbol: {symbol}")
+        return data['High'].iloc[-1]
+    except Exception as e:
+        logger.error(f"Error fetching high price for {symbol}: {e}")
+        return None
 
-    return JsonResponse({"prediction": float(prediction[0])})
+def get_current_low(symbol):
+    """
+    Fetch current low price for a stock or forex pair.
+    """
+    try:
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="1d")
+        if data.empty:
+            raise ValueError(f"No data found for symbol: {symbol}")
+        return data['Low'].iloc[-1]
+    except Exception as e:
+        logger.error(f"Error fetching low price for {symbol}: {e}")
+        return None
 
-# Helper Functions
-def get_current_closing(forex_pair):
-    """Fetch current closing price for a forex pair."""
-    ticker = yf.Ticker(f"{forex_pair}=X")  # Forex pairs use '=X' suffix in Yahoo Finance
-    data = ticker.history(period="1d")
-    if data.empty:
-        logger.warning(f"No data found for forex pair: {forex_pair}")
-        return 0.0
-    return data['Close'].iloc[-1]
-
-def get_current_high(forex_pair):
-    """Fetch current high price for a forex pair."""
-    ticker = yf.Ticker(f"{forex_pair}=X")
-    data = ticker.history(period="1d")
-    if data.empty:
-        logger.warning(f"No data found for forex pair: {forex_pair}")
-        return 0.0
-    return data['High'].iloc[-1]
-
-def get_current_low(forex_pair):
-    """Fetch current low price for a forex pair."""
-    ticker = yf.Ticker(f"{forex_pair}=X")
-    data = ticker.history(period="1d")
-    if data.empty:
-        logger.warning(f"No data found for forex pair: {forex_pair}")
-        return 0.0
-    return data['Low'].iloc[-1]
-
-def get_current_volume(forex_pair):
-    """Fetch current trading volume for a forex pair."""
-    ticker = yf.Ticker(f"{forex_pair}=X")
-    data = ticker.history(period="1d")
-    if data.empty:
-        logger.warning(f"No data found for forex pair: {forex_pair}")
-        return 0.0
-    return data['Volume'].iloc[-1]
+def get_current_volume(symbol):
+    """
+    Fetch current trading volume for a stock or forex pair.
+    """
+    try:
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="1d")
+        if data.empty:
+            raise ValueError(f"No data found for symbol: {symbol}")
+        return data['Volume'].iloc[-1]
+    except Exception as e:
+        logger.error(f"Error fetching volume for {symbol}: {e}")
+        return None
 
 # Load environment variables
 GNEWS_API_KEY = os.getenv('GNEWS_API_KEY')
 GNEWS_BASE_URL = "https://gnews.io/api/v4/search"
+
 
 def fetch_recent_news(company_name):
     """
@@ -435,7 +570,6 @@ def register(request):
         user.save()
         messages.success(request, 'Registration successful! Please login.')
         return redirect('login')
-
 
     return render(request, 'register.html')
 
