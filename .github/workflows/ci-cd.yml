@@ -12,7 +12,7 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
   ECR_REPO: ${{ secrets.ECR_REPO }}
-  DOCKER_IMAGE: ${{ secrets.ECR_REPO }}/stock-forex-app:${{ github.sha }}
+  DOCKER_IMAGE: 376129850308.dkr.ecr.us-east-1.amazonaws.com/stock-forex-app:${{ github.sha }}
   S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
 
 jobs:
