@@ -5,8 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="83a9703f-b224-428c-a46a-c6bff871194a" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.github/workflows/ci-cd.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/ci-cd.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/stock_forex_app/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/stock_forex_app/settings.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -142,7 +142,7 @@
       <workItem from="1743829283320" duration="227000" />
       <workItem from="1743829596372" duration="50247000" />
       <workItem from="1743997893186" duration="3363000" />
-      <workItem from="1744010347026" duration="16461000" />
+      <workItem from="1744010347026" duration="16846000" />
     </task>
     <servers />
   </component>
