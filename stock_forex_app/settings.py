@@ -10,6 +10,9 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "FALSE") == "TRUE"  # Convert string to boolean
 
+# Root URL configuration
+ROOT_URLCONF = 'stock_forex_app.urls'
+
 # AWS Configuration
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')  # Changed os.getenv to os.environ.get
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
