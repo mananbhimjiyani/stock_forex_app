@@ -15,6 +15,7 @@ env:
   DOCKER_IMAGE: 376129850308.dkr.ecr.us-east-1.amazonaws.com/stock-forex-app:${{ github.sha }}
   DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
 
+
 jobs:
   terraform:
     runs-on: ubuntu-latest
