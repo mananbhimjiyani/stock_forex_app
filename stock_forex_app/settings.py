@@ -83,10 +83,9 @@ DATABASES = {
     }
 }
 
-# DynamoDB Session Configuration
-# Add these settings
+# settings.py
 SESSION_ENGINE = 'app.dynamodb_session_backend'
-DYNAMODB_SESSIONS_TABLE_NAME = 'django_sessions'
+DYNAMODB_SESSIONS_TABLE_NAME = 'Sessions'
 SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
 
 # Required for DynamoDB sessions

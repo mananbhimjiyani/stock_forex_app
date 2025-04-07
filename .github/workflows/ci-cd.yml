@@ -13,6 +13,7 @@ env:
   EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
   ECR_REPO: ${{ secrets.ECR_REPO }}
   DOCKER_IMAGE: 376129850308.dkr.ecr.us-east-1.amazonaws.com/stock-forex-app:${{ github.sha }}
+  S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}  # Added for Terraform
 
 jobs:
   terraform:
@@ -42,19 +43,19 @@ jobs:
         working-directory: terraform
 
       - name: Terraform Plan
-        run: terraform plan -var="aws_region=${AWS_REGION}" -var="bucket_name=${S3_BUCKET_NAME}"
+        run: terraform plan -var="aws_region=${{ env.AWS_REGION }}" -var="bucket_name=${{ env.S3_BUCKET_NAME }}"
         working-directory: terraform
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -var="aws_region=${AWS_REGION}" -var="bucket_name=${S3_BUCKET_NAME}"
+        run: terraform apply -auto-approve -var="aws_region=${{ env.AWS_REGION }}" -var="bucket_name=${{ env.S3_BUCKET_NAME }}"
         working-directory: terraform
 
-  build-test-deploy:
+  run-tests:
     needs: terraform
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -72,6 +73,23 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
+
+      - name: Run Django Tests
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          DYNAMODB_SESSIONS_TABLE_NAME: Sessions
+          DJANGO_SETTINGS_MODULE: stock_forex_app.settings  # Adjust to your project name
+        run: |
+          python manage.py test
+
+  build-test-deploy:
+    needs: [terraform, run-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2

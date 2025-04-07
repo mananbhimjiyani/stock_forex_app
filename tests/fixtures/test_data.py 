@@ -1,0 +1,6 @@
+# tests/fixtures/test_data.py
+TEST_COMPANY_DATA = {
+    'symbol': 'AAPL',
+    'name': 'Apple Inc.',
+    'current_price': 150.00
+}

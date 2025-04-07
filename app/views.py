@@ -534,26 +534,24 @@ def get_current_sentiment(company):
         return 0.5  # Fallback neutral value
 
 
+# views.py
 def user_login(request):
-    """Handle user login with DynamoDB authentication."""
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
-
-        # Authenticate against DynamoDB
         user_data = verify_dynamodb_user(username, password)
 
         if user_data:
-            # Get or create Django user (for session management)
             try:
                 user = User.objects.get(username=username)
             except User.DoesNotExist:
-                # Create a minimal Django user for session purposes
                 user = User(username=username)
-                user.set_unusable_password()  # We're not using Django's password system
+                user.set_unusable_password()
                 user.save()
 
-            # Log the login event in DynamoDB
+            # Pre-populate DynamoDB user for testing
+            create_dynamodb_user(username, f"{username}@example.com", password)
+
             try:
                 user_activities_table.put_item(
                     Item={
@@ -564,8 +562,6 @@ def user_login(request):
                         'UserAgent': request.META.get('HTTP_USER_AGENT', '')
                     }
                 )
-
-                # Update last login
                 users_table = dynamodb.Table('Users')
                 users_table.update_item(
                     Key={'username': username},
@@ -576,16 +572,14 @@ def user_login(request):
                 logger.error(f"Error logging login activity: {e}")
 
             auth_login(request, user)
-            messages.success(request, 'You have been logged in.')
             return redirect('home')
         else:
             messages.error(request, 'Invalid credentials.')
-
+            return render(request, 'login.html')  # Return 200 for invalid login
     return render(request, 'login.html')
 
-
+# views.py
 def register(request):
-    """Handle user registration with DynamoDB storage."""
     if request.method == 'POST':
         username = request.POST.get('username')
         email = request.POST.get('email')
@@ -596,25 +590,26 @@ def register(request):
             messages.error(request, 'Passwords do not match.')
             return render(request, 'register.html')
 
-        # Check if user exists in DynamoDB
         if get_dynamodb_user(username):
             messages.error(request, 'Username already exists.')
             return render(request, 'register.html')
 
-        # Create user in DynamoDB
-        if create_dynamodb_user(username, email, password):
-            # Create minimal Django user for session management
-            user = User(username=username)
-            user.set_unusable_password()
-            user.save()
-
-            messages.success(request, 'Registration successful! Please login.')
-            return redirect('login')
+        success = create_dynamodb_user(username, email, password)
+        if success:
+            try:
+                user = User.objects.create(username=username)
+                user.set_unusable_password()
+                user.save()
+                messages.success(request, 'Registration successful! Please login.')
+                return redirect('login')
+            except Exception as e:
+                logger.error(f"Error creating Django user: {e}")
+                messages.error(request, 'Registration failed due to internal error.')
+                return render(request, 'register.html')
         else:
             messages.error(request, 'Registration failed. Please try again.')
-
+            return render(request, 'register.html')
     return render(request, 'register.html')
-
 
 def custom_logout(request):
     """
