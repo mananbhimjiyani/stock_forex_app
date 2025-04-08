@@ -42,3 +42,8 @@ spec:
               key: AWS_SECRET_ACCESS_KEY
         - name: AWS_REGION
           value: "us-east-1"
+        - name: GNEWS_API_KEY
+          valueFrom:
+              secretKeyRef:
+                name: gnews-secrets
+                key: GNEWS_API_KEY
