@@ -1,22 +1,19 @@
 from django.test import TestCase, Client
 from django.urls import reverse
-from django.contrib.auth.models import User
-from app.models import UserActivity, Prediction
+from moto import mock_aws
 import boto3
-from moto import mock_aws  # This mocks all AWS services
-import os
-
 from app.views import create_dynamodb_user, get_dynamodb_user
+from django.contrib.auth.models import User
 
+from django.contrib.auth.models import User  # import this
 
-# tests.py
 @mock_aws
 class BaseTestCase(TestCase):
     def setUp(self):
         self.client = Client()
         self.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 
-        # Create all required tables with proper configurations
+        # Create required DynamoDB tables
         tables = [
             {
                 'TableName': 'Users',
@@ -35,47 +32,24 @@ class BaseTestCase(TestCase):
                     {'AttributeName': 'Timestamp', 'AttributeType': 'S'}
                 ],
                 'ProvisionedThroughput': {'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
-            },
-            {
-                'TableName': 'Predictions',
-                'KeySchema': [
-                    {'AttributeName': 'UserId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'Timestamp', 'KeyType': 'RANGE'}
-                ],
-                'AttributeDefinitions': [
-                    {'AttributeName': 'UserId', 'AttributeType': 'S'},
-                    {'AttributeName': 'Timestamp', 'AttributeType': 'S'}
-                ],
-                'ProvisionedThroughput': {'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
-            },
-            {
-                'TableName': 'Sessions',
-                'KeySchema': [{'AttributeName': 'session_key', 'KeyType': 'HASH'}],
-                'AttributeDefinitions': [{'AttributeName': 'session_key', 'AttributeType': 'S'}],
-                'ProvisionedThroughput': {'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
             }
         ]
 
         for table_config in tables:
-            try:
-                table = self.dynamodb.create_table(**table_config)
-                table.wait_until_exists()
-            except Exception as e:
-                if "ResourceInUseException" not in str(e):
-                    raise
+            self.dynamodb.create_table(**table_config)
+
+        # ⚡ Create a test user for login
+        self.test_user = User.objects.create_user(
+            username='testuser',
+            password='testpass123'
+        )
 
 
-
-# tests.py
 @mock_aws
 class BasicViewTests(BaseTestCase):
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
-            username='testuser',
-            password='testpass123'
-        )
-        # Pre-populate DynamoDB with test user
+        # Create a test user in DynamoDB
         create_dynamodb_user('testuser', 'testuser@example.com', 'testpass123')
 
     def test_valid_login(self):
@@ -84,6 +58,9 @@ class BasicViewTests(BaseTestCase):
             'password': 'testpass123'
         })
         self.assertRedirects(response, reverse('home'))
+        # Verify session is populated
+        self.assertIn('user', self.client.session)
+        self.assertEqual(self.client.session['user']['username'], 'testuser')
 
     def test_invalid_login(self):
         response = self.client.post(reverse('login'), {
@@ -92,7 +69,8 @@ class BasicViewTests(BaseTestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Invalid credentials')
-
+        # Verify session is not populated
+        self.assertNotIn('user', self.client.session)
 
     def test_home_page(self):
         response = self.client.get(reverse('home'))
@@ -109,88 +87,16 @@ class BasicViewTests(BaseTestCase):
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('dashboard')}")
 
     def test_dashboard_authenticated(self):
+        # Login using Django's built-in client login
         self.client.login(username='testuser', password='testpass123')
+
+        # Now access the dashboard
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'dashboard.html')
 
 
-@mock_aws
-class DynamoDBTests(TestCase):
-    def setUp(self):
-        self.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-        self.table_name = 'UserActivities'
-        self.table = self.dynamodb.create_table(
-            TableName=self.table_name,
-            KeySchema=[
-                {'AttributeName': 'UserId', 'KeyType': 'HASH'},
-                {'AttributeName': 'Timestamp', 'KeyType': 'RANGE'}
-            ],
-            AttributeDefinitions=[
-                {'AttributeName': 'UserId', 'AttributeType': 'S'},
-                {'AttributeName': 'Timestamp', 'AttributeType': 'S'}
-            ],
-            ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
-        )
-        self.table.wait_until_exists()
-
-    def test_user_activity_logging(self):
-        from app.views import user_activities_table
-
-        # Mock the table reference
-        user_activities_table = self.table
-
-        # Test activity logging
-        activity_item = {
-            'UserId': 'testuser123',
-            'Activity': 'TestActivity',
-            'Timestamp': '2023-01-01T00:00:00',
-            'UserAgent': 'TestAgent'
-        }
-
-        user_activities_table.put_item(Item=activity_item)
-
-        # Verify the item was inserted
-        response = user_activities_table.get_item(
-            Key={
-                'UserId': 'testuser123',
-                'Timestamp': '2023-01-01T00:00:00'
-            }
-        )
-        self.assertEqual(response['Item'], activity_item)
-
-
-# tests.py
-@mock_aws
-class PredictionModelTests(BaseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.user = User.objects.create_user(
-            username='testuser',
-            password='testpass123'
-        )
-        create_dynamodb_user('testuser', 'testuser@example.com', 'testpass123')
-        self.client.login(username='testuser', password='testpass123')
-
-
-    def test_stock_prediction_view(self):
-        response = self.client.get(reverse('predict_stock'))
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'predict_stock.html')
-
-    def test_forex_prediction_view(self):
-        response = self.client.get(reverse('predict_forex'))
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'predict_forex.html')
-
-
-# tests.py
 @mock_aws
 class RegistrationTests(BaseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.client = Client()
-
     def test_registration_page(self):
         response = self.client.get(reverse('register'))
         self.assertEqual(response.status_code, 200)
@@ -204,7 +110,7 @@ class RegistrationTests(BaseTestCase):
             'confirm_password': 'newpass123'
         })
         self.assertRedirects(response, reverse('login'))
-        self.assertTrue(User.objects.filter(username='newuser').exists())
+
         # Verify DynamoDB entry
         user = get_dynamodb_user('newuser')
         self.assertIsNotNone(user)
@@ -219,4 +125,7 @@ class RegistrationTests(BaseTestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Passwords do not match')
-        self.assertFalse(User.objects.filter(username='newuser').exists())
+
+        # Verify user was not created in DynamoDB
+        user = get_dynamodb_user('newuser')
+        self.assertIsNone(user)

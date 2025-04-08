@@ -764,42 +764,42 @@ def user_profile(request):
     })
 
 # # Add these helper functions for DynamoDB user operations
-# def create_dynamodb_user(username, email, password):
-#     """Create a new user in DynamoDB"""
-#     try:
-#         users_table = dynamodb.Table('Users')
-#         users_table.put_item(
-#             Item={
-#                 'username': username,
-#                 'email': email,
-#                 'password': password,  # Note: In production, you should hash this!
-#                 'created_at': datetime.now().isoformat(),
-#                 'last_login': None,
-#                 'is_active': True
-#             },
-#             ConditionExpression='attribute_not_exists(username)'  # Prevent overwrites
-#         )
-#         return True
-#     except ClientError as e:
-#         if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-#             logger.error(f"Username {username} already exists")
-#         else:
-#             logger.error(f"Error creating user: {e}")
-#         return False
-#
-# def get_dynamodb_user(username):
-#     """Retrieve a user from DynamoDB"""
-#     try:
-#         users_table = dynamodb.Table('Users')
-#         response = users_table.get_item(Key={'username': username})
-#         return response.get('Item')
-#     except ClientError as e:
-#         logger.error(f"Error fetching user: {e}")
-#         return None
-#
-# def verify_dynamodb_user(username, password):
-#     """Verify user credentials against DynamoDB"""
-#     user = get_dynamodb_user(username)
-#     if user and user.get('password') == password:  # In production, use proper password hashing!
-#         return user
-#     return None
+def create_dynamodb_user(username, email, password):
+    """Create a new user in DynamoDB"""
+    try:
+        users_table = dynamodb.Table('Users')
+        users_table.put_item(
+            Item={
+                'username': username,
+                'email': email,
+                'password': hash_password(password),  # Hash the password before storing
+                'created_at': datetime.now().isoformat(),
+                'last_login': None,
+                'is_active': True
+            },
+            ConditionExpression='attribute_not_exists(username)'  # Prevent overwrites
+        )
+        return True
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            logger.error(f"Username {username} already exists")
+        else:
+            logger.error(f"Error creating user: {e}")
+        return False
+
+def get_dynamodb_user(username):
+    """Retrieve a user from DynamoDB"""
+    try:
+        users_table = dynamodb.Table('Users')
+        response = users_table.get_item(Key={'username': username})
+        return response.get('Item')
+    except ClientError as e:
+        logger.error(f"Error fetching user: {e}")
+        return None
+
+def verify_dynamodb_user(username, password):
+    """Verify user credentials against DynamoDB"""
+    user = get_dynamodb_user(username)
+    if user and user.get('password') == password:  # In production, use proper password hashing!
+        return user
+    return None
