@@ -3,8 +3,6 @@ from django.urls import reverse
 from moto import mock_aws
 import boto3
 from app.views import create_dynamodb_user, get_dynamodb_user
-from django.contrib.auth.models import User
-
 from django.contrib.auth.models import User  # import this
 
 @mock_aws

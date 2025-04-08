@@ -7,9 +7,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
-from django.contrib.auth import authenticate, login as auth_login, logout  # Rename Django's login to auth_login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.contrib import messages
 import joblib
 import yfinance as yf
@@ -20,10 +18,9 @@ from datetime import datetime, timedelta
 import pandas as pd
 from django.contrib.auth import logout as auth_logout
 
-from app.models import UserActivity, Prediction
-
 # In app/views.py
 from django.http import HttpResponse
+import bcrypt
 
 
 def health_check(request):
@@ -49,7 +46,6 @@ dynamodb = boto3.resource(
 )
 
 # Add to your imports at the top
-import bcrypt
 users_table = dynamodb.Table('Users')
 
 # Reference DynamoDB tables
