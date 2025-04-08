@@ -385,7 +385,7 @@ def register_view(request):
                 logger.error(f"Error storing user in DynamoDB: {e}")
 
             messages.success(request, 'Registration successful! Please login.')
-            return redirect('login')
+            return redirect('auth_login')
         except Exception as e:
             messages.error(request, f'Registration failed: {str(e)}')
 

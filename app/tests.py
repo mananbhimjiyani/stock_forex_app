@@ -16,12 +16,13 @@ class BaseTestCase(TestCase):
         self.client = Client()
         self.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 
-        # Create all required tables
+        # Create all required tables with proper configurations
         tables = [
             {
                 'TableName': 'Users',
                 'KeySchema': [{'AttributeName': 'username', 'KeyType': 'HASH'}],
-                'AttributeDefinitions': [{'AttributeName': 'username', 'AttributeType': 'S'}]
+                'AttributeDefinitions': [{'AttributeName': 'username', 'AttributeType': 'S'}],
+                'ProvisionedThroughput': {'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
             },
             {
                 'TableName': 'UserActivities',
@@ -32,7 +33,8 @@ class BaseTestCase(TestCase):
                 'AttributeDefinitions': [
                     {'AttributeName': 'UserId', 'AttributeType': 'S'},
                     {'AttributeName': 'Timestamp', 'AttributeType': 'S'}
-                ]
+                ],
+                'ProvisionedThroughput': {'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
             },
             {
                 'TableName': 'Predictions',
@@ -43,21 +45,24 @@ class BaseTestCase(TestCase):
                 'AttributeDefinitions': [
                     {'AttributeName': 'UserId', 'AttributeType': 'S'},
                     {'AttributeName': 'Timestamp', 'AttributeType': 'S'}
-                ]
+                ],
+                'ProvisionedThroughput': {'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
             },
             {
                 'TableName': 'Sessions',
                 'KeySchema': [{'AttributeName': 'session_key', 'KeyType': 'HASH'}],
-                'AttributeDefinitions': [{'AttributeName': 'session_key', 'AttributeType': 'S'}]
+                'AttributeDefinitions': [{'AttributeName': 'session_key', 'AttributeType': 'S'}],
+                'ProvisionedThroughput': {'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
             }
         ]
 
         for table_config in tables:
-            table = self.dynamodb.create_table(
-                **table_config,
-                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
-            )
-            table.wait_until_exists()
+            try:
+                table = self.dynamodb.create_table(**table_config)
+                table.wait_until_exists()
+            except Exception as e:
+                if "ResourceInUseException" not in str(e):
+                    raise
 
 
 

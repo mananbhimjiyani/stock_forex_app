@@ -611,34 +611,38 @@ def register(request):
             return render(request, 'register.html')
     return render(request, 'register.html')
 
+
+# Custom Logout View
 def custom_logout(request):
-    """
-    Handle user logout with custom logic.
-    """
     try:
-        # Log logout event in DynamoDB
+        # Log logout event in the UserActivity table
         if request.user.is_authenticated:
-            dynamodb = boto3.resource('dynamodb')
-            table = dynamodb.Table('UserLogins')
-            table.put_item(Item={
-                'UserId': str(request.user.id),
-                'LogoutTime': str(pd.Timestamp.now()),
-                'IPAddress': request.META.get('REMOTE_ADDR', '')
-            })
+            dynamodb = boto3.resource('dynamodb', region_name='us-east-1')  # Replace with your AWS region
+            table = dynamodb.Table('UserActivities')  # Use the UserActivity table
+
+            table.put_item(
+                Item={
+                    'UserId': str(request.user.id),
+                    'Activity': 'Logout',
+                    'Timestamp': datetime.now().isoformat(),
+                    'IPAddress': request.META.get('REMOTE_ADDR', ''),
+                    'UserAgent': request.META.get('HTTP_USER_AGENT', ''),
+                }
+            )
 
         # Perform logout using Django's built-in logout function
         auth_logout(request)
 
         # Add success message
-        messages.success(request, 'You have been logged out.')
+        messages.success(request, 'You have been logged out successfully.')
 
-    except Exception as e:
+    except ClientError as e:
         # Log any errors during logout
-        logger.error(f"Error during logout: {e}")
+        print(f"Error during logout: {e}")
         messages.error(request, 'An error occurred while logging out.')
 
-    # Always redirect to the home page
-    return redirect('home')
+    # Redirect to the login page or home page
+    return redirect('login')
 
 
 @login_required

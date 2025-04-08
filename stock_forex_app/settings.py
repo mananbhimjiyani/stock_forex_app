@@ -1,5 +1,8 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Base Directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -8,10 +11,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "FALSE") == "TRUE"  # Convert string to boolean
+# DEBUG = os.environ.get("DEBUG", "FALSE") == "TRUE"  # Convert string to boolean
+
+DEBUG = True
 
 # Root URL configuration
 ROOT_URLCONF = 'stock_forex_app.urls'
+LOGIN_URL = '/login/'
 
 # AWS Configuration
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')  # Changed os.getenv to os.environ.get
@@ -22,6 +28,10 @@ AWS_S3_REGION_NAME = "us-east-1"
 AWS_S3_CUSTOM_DOMAIN = os.environ.get('AWS_CLOUDFRONT_DOMAIN')
 AWS_QUERYSTRING_AUTH = False
 AWS_DEFAULT_ACL = None
+STATIC_URL = 'd1bomvpkbhm8k4.cloudfront.net/static/'
+DYNAMODB_SESSIONS_TABLE_NAME='django_sessions'
+
+
 
 # Allowed hosts
 ALLOWED_HOSTS = ["*"]
@@ -56,6 +66,31 @@ DYNAMODB_TABLES = {
     "UserActivities": "UserActivities",
     "Users": "Users",
 }
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / "templates"],  # Directory for custom templates
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',  # Required for sessions
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',  # Required for authentication
+    'django.contrib.messages.middleware.MessageMiddleware',  # Required for messages
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
 
 # Session Configuration
 SESSION_ENGINE = 'app.dynamodb_session_backend'
