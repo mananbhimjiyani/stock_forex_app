@@ -17,6 +17,7 @@ from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 import pandas as pd
 from django.contrib.auth import logout as auth_logout
+from app.decorators import dynamodb_login_required
 
 # In app/views.py
 from django.http import HttpResponse
@@ -120,7 +121,7 @@ def load_model_from_s3(bucket_name, model_key):
         raise
 
 
-@login_required
+@dynamodb_login_required
 def api_usage(request):
     """
     Monitor API usage for GNews and AWS Comprehend.
@@ -150,7 +151,7 @@ def home(request):
     """Render the home page."""
     return render(request, 'home.html')
 
-@login_required
+@dynamodb_login_required
 def dashboard(request):
     """Render the dashboard page for authenticated users."""
     try:
@@ -171,7 +172,7 @@ def dashboard(request):
 # Load environment variables
 bucket_name = 'stock-forex-app'  # Replace with your S3 bucket name
 
-@login_required
+@dynamodb_login_required
 @rate_limit
 def predict_stock(request):
     # Initialize variables for rendering
@@ -261,7 +262,7 @@ def predict_stock(request):
 
 
 @rate_limit
-@login_required
+@dynamodb_login_required
 def predict_forex(request):
     # Initialize variables for rendering
     prediction = None
@@ -657,7 +658,7 @@ def user_login(request):
 
 
 # Add password reset functionality (optional)
-@login_required
+@dynamodb_login_required
 def change_password(request):
     if request.method == 'POST':
         current_password = request.POST.get('current_password')
@@ -734,7 +735,7 @@ def custom_logout(request):
     return redirect('login')
 
 
-@login_required
+@dynamodb_login_required
 def user_profile(request):
     """
     Display user profile with activity history.
