@@ -48,6 +48,10 @@ dynamodb = boto3.resource(
     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
 )
 
+# Add to your imports at the top
+import bcrypt
+users_table = dynamodb.Table('Users')
+
 # Reference DynamoDB tables
 news_cache_table = dynamodb.Table('NewsCache')
 sentiment_cache_table = dynamodb.Table('SentimentCache')
@@ -534,51 +538,15 @@ def get_current_sentiment(company):
         return 0.5  # Fallback neutral value
 
 
-# views.py
-def user_login(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        user_data = verify_dynamodb_user(username, password)
+# Helper functions for password hashing
+def hash_password(password):
+    """Hash a password using bcrypt"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-        if user_data:
-            try:
-                user = User.objects.get(username=username)
-            except User.DoesNotExist:
-                user = User(username=username)
-                user.set_unusable_password()
-                user.save()
+def check_password(password, hashed_password):
+    """Check if password matches the hashed version"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-            # Pre-populate DynamoDB user for testing
-            create_dynamodb_user(username, f"{username}@example.com", password)
-
-            try:
-                user_activities_table.put_item(
-                    Item={
-                        'UserId': username,
-                        'Activity': 'Login',
-                        'Timestamp': datetime.now().isoformat(),
-                        'IPAddress': request.META.get('REMOTE_ADDR', ''),
-                        'UserAgent': request.META.get('HTTP_USER_AGENT', '')
-                    }
-                )
-                users_table = dynamodb.Table('Users')
-                users_table.update_item(
-                    Key={'username': username},
-                    UpdateExpression='SET last_login = :val',
-                    ExpressionAttributeValues={':val': datetime.now().isoformat()}
-                )
-            except ClientError as e:
-                logger.error(f"Error logging login activity: {e}")
-
-            auth_login(request, user)
-            return redirect('home')
-        else:
-            messages.error(request, 'Invalid credentials.')
-            return render(request, 'login.html')  # Return 200 for invalid login
-    return render(request, 'login.html')
-
-# views.py
 def register(request):
     if request.method == 'POST':
         username = request.POST.get('username')
@@ -586,31 +554,156 @@ def register(request):
         password = request.POST.get('password')
         confirm_password = request.POST.get('confirm_password')
 
+        # Validation
+        if not all([username, email, password, confirm_password]):
+            messages.error(request, 'All fields are required.')
+            return render(request, 'register.html')
         if password != confirm_password:
             messages.error(request, 'Passwords do not match.')
             return render(request, 'register.html')
-
-        if get_dynamodb_user(username):
-            messages.error(request, 'Username already exists.')
+        if len(password) < 8:
+            messages.error(request, 'Password must be at least 8 characters.')
             return render(request, 'register.html')
 
-        success = create_dynamodb_user(username, email, password)
-        if success:
-            try:
-                user = User.objects.create(username=username)
-                user.set_unusable_password()
-                user.save()
-                messages.success(request, 'Registration successful! Please login.')
-                return redirect('login')
-            except Exception as e:
-                logger.error(f"Error creating Django user: {e}")
-                messages.error(request, 'Registration failed due to internal error.')
+        try:
+            # Check if user exists
+            response = users_table.get_item(Key={'username': username})
+            if 'Item' in response:
+                messages.error(request, 'Username already exists.')
                 return render(request, 'register.html')
-        else:
+
+            # Hash the password
+            hashed_password = hash_password(password)
+
+            # Create new user in DynamoDB
+            users_table.put_item(
+                Item={
+                    'username': username,
+                    'email': email,
+                    'password': hashed_password,  # Store the hashed password
+                    'created_at': datetime.now().isoformat(),
+                    'last_login': None,
+                    'is_active': True
+                }
+            )
+
+            messages.success(request, 'Registration successful! Please login.')
+            return redirect('login')
+
+        except ClientError as e:
+            logger.error(f"Error during registration: {e}")
             messages.error(request, 'Registration failed. Please try again.')
             return render(request, 'register.html')
+
     return render(request, 'register.html')
 
+def user_login(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+
+        if not username or not password:
+            messages.error(request, 'Both username and password are required.')
+            return render(request, 'login.html')
+
+        try:
+            # Get user from DynamoDB
+            response = users_table.get_item(Key={'username': username})
+            user_data = response.get('Item')
+
+            if not user_data:
+                messages.error(request, 'Invalid credentials.')
+                return render(request, 'login.html')
+
+            # Verify password
+            if not check_password(password, user_data['password']):
+                messages.error(request, 'Invalid credentials.')
+                return render(request, 'login.html')
+
+            # Check if account is active
+            if not user_data.get('is_active', True):
+                messages.error(request, 'Account is disabled.')
+                return render(request, 'login.html')
+
+            # Log activity
+            user_activities_table.put_item(
+                Item={
+                    'UserId': username,
+                    'Activity': 'Login',
+                    'Timestamp': datetime.now().isoformat(),
+                    'IPAddress': request.META.get('REMOTE_ADDR', ''),
+                    'UserAgent': request.META.get('HTTP_USER_AGENT', '')
+                }
+            )
+
+            # Update last login timestamp
+            users_table.update_item(
+                Key={'username': username},
+                UpdateExpression='SET last_login = :val',
+                ExpressionAttributeValues={':val': datetime.now().isoformat()}
+            )
+
+            # Store user information in session
+            request.session['user'] = {
+                'username': username,
+                'is_authenticated': True
+            }
+
+            messages.success(request, 'Login successful!')
+            return redirect('home')
+
+        except ClientError as e:
+            logger.error(f"Error during login: {e}")
+            messages.error(request, 'Login failed. Please try again.')
+            return render(request, 'login.html')
+
+    return render(request, 'login.html')
+
+
+# Add password reset functionality (optional)
+@login_required
+def change_password(request):
+    if request.method == 'POST':
+        current_password = request.POST.get('current_password')
+        new_password = request.POST.get('new_password')
+        confirm_password = request.POST.get('confirm_password')
+
+        if new_password != confirm_password:
+            messages.error(request, 'New passwords do not match.')
+            return redirect('profile')
+
+        try:
+            # Get user from DynamoDB
+            response = users_table.get_item(Key={'username': request.user.username})
+            user_data = response.get('Item')
+
+            if not user_data:
+                messages.error(request, 'User not found.')
+                return redirect('profile')
+
+            # Verify current password
+            if not check_password(current_password, user_data['password']):
+                messages.error(request, 'Current password is incorrect.')
+                return redirect('profile')
+
+            # Update password
+            users_table.update_item(
+                Key={'username': request.user.username},
+                UpdateExpression='SET password = :val',
+                ExpressionAttributeValues={
+                    ':val': hash_password(new_password)
+                }
+            )
+
+            messages.success(request, 'Password changed successfully!')
+            return redirect('profile')
+
+        except ClientError as e:
+            logger.error(f"Error changing password: {e}")
+            messages.error(request, 'Failed to change password. Please try again.')
+            return redirect('profile')
+
+    return redirect('profile')
 
 # Custom Logout View
 def custom_logout(request):
@@ -670,43 +763,43 @@ def user_profile(request):
         'activities': activities
     })
 
-# Add these helper functions for DynamoDB user operations
-def create_dynamodb_user(username, email, password):
-    """Create a new user in DynamoDB"""
-    try:
-        users_table = dynamodb.Table('Users')
-        users_table.put_item(
-            Item={
-                'username': username,
-                'email': email,
-                'password': password,  # Note: In production, you should hash this!
-                'created_at': datetime.now().isoformat(),
-                'last_login': None,
-                'is_active': True
-            },
-            ConditionExpression='attribute_not_exists(username)'  # Prevent overwrites
-        )
-        return True
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-            logger.error(f"Username {username} already exists")
-        else:
-            logger.error(f"Error creating user: {e}")
-        return False
-
-def get_dynamodb_user(username):
-    """Retrieve a user from DynamoDB"""
-    try:
-        users_table = dynamodb.Table('Users')
-        response = users_table.get_item(Key={'username': username})
-        return response.get('Item')
-    except ClientError as e:
-        logger.error(f"Error fetching user: {e}")
-        return None
-
-def verify_dynamodb_user(username, password):
-    """Verify user credentials against DynamoDB"""
-    user = get_dynamodb_user(username)
-    if user and user.get('password') == password:  # In production, use proper password hashing!
-        return user
-    return None
+# # Add these helper functions for DynamoDB user operations
+# def create_dynamodb_user(username, email, password):
+#     """Create a new user in DynamoDB"""
+#     try:
+#         users_table = dynamodb.Table('Users')
+#         users_table.put_item(
+#             Item={
+#                 'username': username,
+#                 'email': email,
+#                 'password': password,  # Note: In production, you should hash this!
+#                 'created_at': datetime.now().isoformat(),
+#                 'last_login': None,
+#                 'is_active': True
+#             },
+#             ConditionExpression='attribute_not_exists(username)'  # Prevent overwrites
+#         )
+#         return True
+#     except ClientError as e:
+#         if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+#             logger.error(f"Username {username} already exists")
+#         else:
+#             logger.error(f"Error creating user: {e}")
+#         return False
+#
+# def get_dynamodb_user(username):
+#     """Retrieve a user from DynamoDB"""
+#     try:
+#         users_table = dynamodb.Table('Users')
+#         response = users_table.get_item(Key={'username': username})
+#         return response.get('Item')
+#     except ClientError as e:
+#         logger.error(f"Error fetching user: {e}")
+#         return None
+#
+# def verify_dynamodb_user(username, password):
+#     """Verify user credentials against DynamoDB"""
+#     user = get_dynamodb_user(username)
+#     if user and user.get('password') == password:  # In production, use proper password hashing!
+#         return user
+#     return None

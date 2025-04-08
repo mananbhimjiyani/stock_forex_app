@@ -15,13 +15,13 @@
       <a href="/">Home</a>
 
       <!-- Conditional Links Based on Authentication Status -->
-      {% if request.user.is_authenticated %}
+      {% if request.session.user and request.session.user.is_authenticated %}
         <!-- Links for Logged-In Users -->
         <a href="/predict_stock">Predict Stock</a>
         <a href="/predict_forex">Predict Forex</a>
         <a href="/profile">Profile</a> <!-- Link to Profile Page -->
         <a href="/logout">Logout</a>
-        <span>Welcome, {{ request.user.username }}!</span>
+        <span>Welcome, {{ request.session.user.username }}!</span>
       {% else %}
         <!-- Links for Non-Logged-In Users -->
         <a href="/login">Login</a>
