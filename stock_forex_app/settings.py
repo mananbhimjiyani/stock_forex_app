@@ -13,7 +13,7 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "FALSE") == "TRUE"  # Convert string to boolean
 
-DEBUG = True
+# DEBUG = True
 
 # Root URL configuration
 ROOT_URLCONF = 'stock_forex_app.urls'
