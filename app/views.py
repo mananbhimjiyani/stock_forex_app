@@ -212,7 +212,6 @@ def predict_stock(request):
             try:
                 bucket_name = 'stock-forex-app'  # Replace with your S3 bucket name
                 model_key = 'models/stock_price_predictor_model.joblib'
-                s3_client = boto3.client('s3')
                 s3_client.download_file(bucket_name, model_key, '/tmp/stock_price_predictor_model.joblib')
                 model = joblib.load('/tmp/stock_price_predictor_model.joblib')
             except Exception as e:
@@ -299,7 +298,6 @@ def predict_forex(request):
             bucket_name = 'stock-forex-app'  # Replace with your S3 bucket name
             model_key = f'models/{model_file}'  # Path to the model in S3
             try:
-                s3_client = boto3.client('s3')
                 s3_client.download_file(bucket_name, model_key, f'/tmp/{model_file}')
                 model = joblib.load(f'/tmp/{model_file}')
             except Exception as e:
