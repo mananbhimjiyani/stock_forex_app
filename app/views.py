@@ -235,7 +235,7 @@ def predict_stock(request):
 
             # Log prediction in DynamoDB
             try:
-                dynamodb = boto3.resource('dynamodb')
+                dynamodb = boto3.resource('dynamodb',region_name='us-east-1')
                 table = dynamodb.Table('Predictions')
                 table.put_item(Item={
                     'UserId': str(request.user.id),
@@ -330,7 +330,7 @@ def predict_forex(request):
 
             # Log prediction in DynamoDB
             try:
-                dynamodb = boto3.resource('dynamodb')
+                dynamodb = boto3.resource('dynamodb',region_name='us-east-1')
                 table = dynamodb.Table('Predictions')
                 table.put_item(Item={
                     'UserId': str(request.user.id),
