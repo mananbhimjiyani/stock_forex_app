@@ -1,5 +1,4 @@
 asgiref==3.8.1
-awsebcli==3.21.0
 bcrypt==4.3.0
 beautifulsoup4==4.13.3
 blessed==1.20.0
