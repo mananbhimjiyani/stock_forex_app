@@ -118,13 +118,20 @@ jobs:
 
       - name: Create Kubernetes Secrets
         run: |
+          # Create Django secrets
           kubectl create secret generic django-secrets \
             --from-literal=DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
+# Create AWS secrets
           kubectl create secret generic aws-secrets \
             --from-literal=AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
             --from-literal=AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+# Create GNews secrets (new addition)
+          kubectl create secret generic gnews-secrets \
+            --from-literal=GNEWS_API_KEY=${{ secrets.GNEWS_API_KEY }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy to EKS

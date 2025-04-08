@@ -444,11 +444,12 @@ def fetch_recent_news(company_name):
         params = {
             'q': company_name,
             'lang': 'en',
-            'country': 'US',
-            'max': 5,  # Limit to 5 articles per request
+            'max': 5,
             'apikey': GNEWS_API_KEY
         }
         response = requests.get(GNEWS_BASE_URL, params=params)
+        print(GNEWS_BASE_URL)
+        print(requests.get(GNEWS_BASE_URL, params=params))
         if response.status_code == 200:
             data = response.json()
             articles = data.get('articles', [])
@@ -475,61 +476,10 @@ def fetch_recent_news(company_name):
 
 def get_current_sentiment(company):
     """
-    Fetch sentiment score for a company using AWS Comprehend.
-    Cache results in DynamoDB to minimize API calls.
-    Track monthly API usage to stay within Free Tier limits (50,000 text units/month).
+    Fetch sentiment score for a company.
+    Since sentiment analysis is removed, always return 0.5 (neutral sentiment).
     """
-    try:
-        # Check if cached sentiment exists and is less than 1 hour old
-        response = sentiment_cache_table.get_item(Key={'Company': company})
-        if 'Item' in response:
-            item = response['Item']
-            timestamp = pd.to_datetime(item['Timestamp'])
-            if (pd.Timestamp.now() - timestamp).total_seconds() < 3600:
-                return float(item['Score'])
-    except ClientError as e:
-        print(f"Error accessing DynamoDB: {e}")
-
-    # Check monthly API usage counter
-    comprehend_counter_key = "comprehend_monthly_counter"
-    count = cache.get(comprehend_counter_key, 0)
-    if count >= 45000:  # Leave buffer below 50,000
-        print("Monthly AWS Comprehend API limit reached. Using neutral sentiment fallback.")
-        return 0.5  # Neutral fallback
-
-    # Fetch recent news
-    articles = fetch_recent_news(company)
-    if not articles:
-        return 0.5  # Neutral fallback
-
-    # Prepare sample text for sentiment analysis
-    sample_text = " ".join([article['title'] for article in articles])[:5000]  # Limit to 5,000 characters
-
-    # Perform sentiment analysis using AWS Comprehend
-    comprehend = boto3.client('comprehend')
-    try:
-        response = comprehend.detect_sentiment(Text=sample_text, LanguageCode='en')
-        sentiment_map = {'POSITIVE': 0.9, 'NEGATIVE': 0.1, 'NEUTRAL': 0.5, 'MIXED': 0.5}
-        sentiment_score = sentiment_map.get(response['Sentiment'], 0.5)
-
-        # Cache the result in DynamoDB
-        sentiment_cache_table.put_item(
-            Item={
-                'Company': company,
-                'Score': str(sentiment_score),
-                'Timestamp': pd.Timestamp.now().isoformat()
-            }
-        )
-
-        # Increment monthly API usage counter
-        cache.set(comprehend_counter_key, count + len(sample_text), timeout=2592000)  # Reset after 30 days
-        return sentiment_score
-    except (BotoCoreError, ClientError) as error:
-        print(f"AWS Comprehend error: {error}")
-        return 0.5  # Fallback neutral value
-    except Exception as e:
-        print(f"Unexpected error in sentiment analysis: {e}")
-        return 0.5  # Fallback neutral value
+    return 0.5
 
 
 # Helper functions for password hashing
