@@ -5,9 +5,8 @@ import requests
 from botocore.exceptions import ClientError, BotoCoreError
 from django.conf import settings
 from django.core.cache import cache
-from django.shortcuts import render, redirect
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from django.shortcuts import redirect
 from django.contrib import messages
 import joblib
 import yfinance as yf
@@ -20,7 +19,7 @@ from django.contrib.auth import logout as auth_logout
 from app.decorators import dynamodb_login_required
 
 # In app/views.py
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 import bcrypt
 
 
