@@ -25,10 +25,10 @@ AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 AWS_STORAGE_BUCKET_NAME = "stock-forex-app"
 AWS_S3_REGION_NAME = "us-east-1"
-AWS_S3_CUSTOM_DOMAIN = os.environ.get('AWS_CLOUDFRONT_DOMAIN')
+AWS_S3_CUSTOM_DOMAIN = os.environ.get('AWS_CLOUDFRONT_DOMAIN', 'd1bomvpkbhm8k4.cloudfront.net')
 AWS_QUERYSTRING_AUTH = False
 AWS_DEFAULT_ACL = None
-STATIC_URL = 'd1bomvpkbhm8k4.cloudfront.net/static/'
+STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/static/"
 DYNAMODB_SESSIONS_TABLE_NAME='django_sessions'
 
 
